@@ -8,9 +8,9 @@
 
 A hard requirement from the team: **the existing domain model must not be changed to serve
 integration.** No new base classes on aggregates, no `List<IDomainEvent>` added to
-`Property`, no `IIntegrationAware` marker interfaces, no fields that exist only so an
-external system can consume us. The domain expresses the real-estate business; the fact
-that a partner service wants a JSON copy is not a business concern of `Property`.
+`Foo`, no `IIntegrationAware` marker interfaces, no fields that exist only so an
+external system can consume us. The domain expresses the business domain; the fact
+that a partner service wants a JSON copy is not a business concern of `Foo`.
 
 This is the correct instinct (it is exactly what the Anti-Corruption Layer and Published
 Language patterns exist for), but it creates a concrete engineering problem: **if aggregates
@@ -32,7 +32,7 @@ touched entity to its **owning aggregate root**, and writes one narrow row per a
 aggregate into `integration.outbox_change_log`.
 
 ```csharp
-// ProReelEstate.Infrastructure.Integration.ChangeCapture
+// Acme.Infrastructure.Integration.ChangeCapture
 public sealed class OutboxChangeCaptureInterceptor(
     IAggregateRootResolver resolver,
     TimeProvider clock,
@@ -85,12 +85,12 @@ distributed transaction, no dual write.
 ```csharp
 services.AddAggregateRootResolution(map =>
 {
-    map.Root<Property>(p => p.Id);
-    map.Owned<PropertyPhoto>(x => x.PropertyId, root: typeof(Property));
-    map.Owned<PropertyFeature>(x => x.PropertyId, root: typeof(Property));
-    map.Root<Building>(b => b.Id);
-    map.Owned<BuildingUnit>(x => x.BuildingId, root: typeof(Building));
-    map.Root<Location>(l => l.Id);
+    map.Root<Foo>(p => p.Id);
+    map.Owned<FooAttachment>(x => x.FooId, root: typeof(Foo));
+    map.Owned<FooTag>(x => x.FooId, root: typeof(Foo));
+    map.Root<Bar>(b => b.Id);
+    map.Owned<BarUnit>(x => x.BarId, root: typeof(Bar));
+    map.Root<Baz>(l => l.Id);
     // Anything not registered is NOT captured — and a startup check reports it.
 });
 ```
@@ -102,7 +102,7 @@ table" — the classic silent integration bug.
 
 ### 2. Materialisation: deferred, out of band (two-stage outbox)
 
-The interceptor writes only *"aggregate `Property/{guid}` changed at T"* — roughly 200 bytes.
+The interceptor writes only *"aggregate `Foo/{guid}` changed at T"* — roughly 200 bytes.
 It does **not** build the external JSON. A separate `MaterializerWorker` picks up pending
 change-log rows, loads the full aggregate through a dedicated read query, runs it through
 the Anti-Corruption Layer mapper (ADR-0004), and writes the finished contract payload into
@@ -110,8 +110,8 @@ the Anti-Corruption Layer mapper (ADR-0004), and writes the finished contract pa
 
 Why not serialise inside the interceptor:
 
-- **No N+1 inside `SaveChanges`.** Building a `Property` contract needs `Building`,
-  `Location`, photos, features. Loading those from inside `SavingChangesAsync` triggers
+- **No N+1 inside `SaveChanges`.** Building a `Foo` contract needs `Bar`,
+  `Baz`, attachments, tags. Loading those from inside `SavingChangesAsync` triggers
   queries on a connection that is mid-transaction — slow, and a deadlock generator under load.
 - **Business latency stays untouched.** Mapping cost is moved off the user's request.
 - **Compaction becomes possible.** Twenty edits to one property in a minute collapse into
@@ -145,15 +145,15 @@ This is a genuine trade-off, so it is bounded:
 | "I need an audit trail" | Out of scope for integration; use the existing audit facility. |
 
 For the small number of cases where the *transition* is the payload (`PriceChanged`,
-`Delisted`, `OwnershipTransferred`), the **Application layer** — not the Domain — enqueues
+`Deactivated`, `Reassigned`), the **Application layer** — not the Domain — enqueues
 an explicit event:
 
 ```csharp
-// ProReelEstate.Application.Properties.ChangePrice
+// Acme.Application.Properties.ChangePrice
 public async Task<Result> HandleAsync(ChangePriceCommand cmd, CancellationToken ct)
 {
-    var property = await _properties.GetByIdAsync(cmd.PropertyId, ct);
-    if (property is null) return Result.Failure("Property not found.");
+    var property = await _properties.GetByIdAsync(cmd.FooId, ct);
+    if (property is null) return Result.Failure("Foo not found.");
 
     var previous = property.Price;
     var result = property.ChangePrice(cmd.NewPrice);      // domain unchanged
@@ -179,7 +179,7 @@ interesting.
 *Rejected — violates the stated constraint.* It is the textbook approach and it does give
 perfect event fidelity, but it requires editing every aggregate, adding a base class, and
 mixing an infrastructure concern into the domain. It also does not solve materialisation:
-you still need to load related data to build a `Property` contract, so you still end up with
+you still need to load related data to build a `Foo` contract, so you still end up with
 a deferred stage. Revisit only if state-transfer semantics prove insufficient for many
 consumers.
 

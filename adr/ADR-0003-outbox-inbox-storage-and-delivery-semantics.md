@@ -28,8 +28,8 @@ point of the pattern. A separate schema keeps the boundary visible, allows separ
 migration history, distinct grants, and independent partition/retention policy.
 
 ```
-proreelestate (database)
-├── public / estate     ← domain tables, unchanged
+acme (database)
+├── public / core      ← domain tables, unchanged
 └── integration         ← outbox_change_log, outbox_message, outbox_delivery,
                           inbox_message, dead_letter, subscriber, consumer_cursor,
                           backfill_run
@@ -115,7 +115,7 @@ Global ordering across aggregates is **not** offered — it has no business mean
 force single-threaded delivery.
 
 Per-aggregate ordering is where naive outbox implementations break: with `SKIP LOCKED` and
-N workers, two pending messages for the same `Property` can be delivered out of order, and
+N workers, two pending messages for the same `Foo` can be delivered out of order, and
 a retry of message #1 can land *after* message #2. Rather than build stream locks, we exploit
 the state-transfer decision from ADR-0002:
 

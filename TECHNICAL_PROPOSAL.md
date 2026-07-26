@@ -1,4 +1,4 @@
-# Technical Proposal — External Service Integration for ProReel Estate
+# Technical Proposal — External Service Integration for Acme
 
 - **Version:** 1.0 (draft for review)
 - **Date:** 2026-07-25
@@ -9,7 +9,8 @@
   [0003](adr/ADR-0003-outbox-inbox-storage-and-delivery-semantics.md) ·
   [0004](adr/ADR-0004-contract-mapping-payload-and-versioning.md) ·
   [0005](adr/ADR-0005-authentication-and-transport-security.md) ·
-  [0006](adr/ADR-0006-initial-backfill-and-reconciliation.md)
+  [0006](adr/ADR-0006-initial-backfill-and-reconciliation.md) ·
+  [0007](adr/ADR-0007-staged-delivery-and-the-first-increment.md)
 - **Companion documents:** [MAPPING_MATRIX.md](MAPPING_MATRIX.md) ·
   [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
@@ -17,7 +18,7 @@
 
 ## 1. Summary
 
-ProReel Estate must exchange `Property`, `Building` and `Location` data bidirectionally with
+Acme must exchange `Foo`, `Bar` and `Baz` data bidirectionally with
 other internal company services over HTTP. Kafka is unavailable, the peer owns the wire format,
 and the domain model must not be modified.
 
@@ -39,16 +40,44 @@ Four properties this buys, in priority order:
 4. **Broker-ready** — when Kafka arrives, only the dispatcher's transport changes. The outbox,
    contracts, mapping and inbox all survive.
 
-Estimated effort: **~4 weeks for one engineer to production-ready**, with a demonstrable
-end-to-end slice on **day 3** (see IMPLEMENTATION_PLAN.md).
+Estimated effort: **~4 weeks of engineering for one engineer to production-ready** — calendar time
+is longer, because `MAPPING_MATRIX.md` §7 carries eight gaps that each need a round trip with
+another team. Delivery is staged (ADR-0007): a peer can `GET` our catalogue in their contract shape
+at the **end of stage 1, day 2**, with no new tables and no change to the write path.
 
 ---
 
 ## 2. Scope, assumptions and open questions
 
+### 2.0 Domain independence
+
+**This design does not depend on what the aggregates mean.** It is selected by four structural facts,
+none of which is about subject matter:
+
+| Fact | What it forces |
+|---|---|
+| Aggregates change inside database transactions | Capture must be transactional, or changes are lost — hence the outbox (ADR-0001) |
+| Someone outside the service must observe those changes | A durable log with two read paths, push and pull (ADR-0001) |
+| The wire format is owned by someone else | An anti-corruption layer, and losslessness enforced by the build (ADR-0004) |
+| No broker is available | We reproduce the slice of one we need, broker-ready (ADR-0001) |
+
+Any domain matching those four sentences fits this design with **no change other than the aggregate
+names**: orders and shipments, patients and encounters, accounts and ledger entries, devices and
+telemetry, tickets and assignments.
+
+`Foo`, `Bar`, `Baz`, `Acme` and `peer-a` are placeholders throughout — see
+[CLAUDE.md](CLAUDE.md#naming--all-names-are-placeholders). `Bar` and `Baz` exist so the
+**fan-out** case (a referenced aggregate changes, so every `Foo` referencing it must be re-emitted)
+and the **flattening** case (a hierarchy the peer wants flat) have somewhere to live. Delete them
+and those two problems become invisible until an implementer hits them.
+
+Value-level concepts stay concrete — money, quantities with explicit units, date-only versus
+timestamp, coordinates, contact details. They are cross-domain, and §7 plus `MAPPING_MATRIX.md` §6
+exist because of them.
+
 ### 2.1 In scope
 
-- Outbound change publication for `Property`, `Building`, `Location`.
+- Outbound change publication for `Foo`, `Bar`, `Baz`.
 - Inbound ingestion from peer services into the domain via an ACL.
 - Outbox/inbox schema, workers, delivery, retry, dead-lettering, replay.
 - Cursor-based change feed and snapshot/backfill endpoints.
@@ -70,11 +99,12 @@ end-to-end slice on **day 3** (see IMPLEMENTATION_PLAN.md).
 | Q1 | Snapshot or delta payloads? (ADR-0004 §3) | Dispatcher ordering, feed design | **Build for snapshots** |
 | Q2 | Which auth mechanism is available? (ADR-0005) | Ingress + outbound clients | **OAuth2 client credentials**, HMAC fallback |
 | Q3 | Peer OpenAPI schema — where is it? | All mapping work | Blocks mapper implementation entirely |
-| Q4 | Embed building/location in property, or references only? | Materializer fan-out | **References only** |
+| Q4 | Embed `Bar`/`Baz` in `Foo`, or references only? | Materializer fan-out | **References only** |
 | Q5 | PostgreSQL major version in production? | `xid8` watermark (needs 13+) | Verify before day 1 |
-| Q6 | Is the peer authorised to receive agent PII? | Mapping + redaction | **Redact until confirmed** |
+| Q6 | Is the peer authorised to receive contact PII? | Mapping + redaction | **Redact until confirmed** |
 | Q7 | Does the peer push to us, do we poll them, or both? | Inbound design | **Build ingress first**, poller second |
-| Q8 | Catalogue size (row counts per aggregate)? | Backfill sizing | Assume ~500 k properties |
+| Q8 | Catalogue size (row counts per aggregate)? | Backfill sizing | Assume ~500 k `Foo` records |
+| Q17 | Is there a pilot consumer who can read a stage 1 read-only API? (ADR-0007) | The value of stage 1, and therefore the staging order | **Assume yes**; if none exists, re-read ADR-0007 alternative (A) |
 
 Q3 is the true critical path: **nothing in the mapping layer can be finished without the
 peer's schema.** Everything else (outbox, dispatcher, feed, inbox plumbing) can proceed in
@@ -95,7 +125,7 @@ parallel against a stub contract.
 ### 3.1 Overall flow
 
 ```
-        ┌──────────────────────── ProReel Estate ────────────────────────┐
+        ┌──────────────────────── Acme ────────────────────────┐
         │                                                                 │
  HTTP   │  Api ──► Application ──► Domain ──► EF Core ──┐                 │
  write  │                          (UNCHANGED)          │ SaveChangesAsync│
@@ -105,7 +135,7 @@ parallel against a stub contract.
         │                        └──────────┬─────────────────┘           │
         │                     ONE TRANSACTION│                            │
         │            ┌───────────────────────▼──────────────────────┐     │
-        │            │ estate.*  +  integration.outbox_change_log    │     │
+        │            │ core.*  +  integration.outbox_change_log    │     │
         │            └───────────────────────┬──────────────────────┘     │
         │                                    │ async                      │
         │            ┌───────────────────────▼──────────────────────┐     │
@@ -144,12 +174,12 @@ Existing projects untouched; three new ones:
 
 ```
 src/
-├── ProReelEstate.Domain/                    ← UNCHANGED
-├── ProReelEstate.Application/               ← + IIntegrationEventEnqueuer (interface only)
-├── ProReelEstate.Infrastructure/            ← + interceptor registration, EF configs
-├── ProReelEstate.Api/                       ← + endpoint mapping only
+├── Acme.Domain/                    ← UNCHANGED
+├── Acme.Application/               ← + IIntegrationEventEnqueuer (interface only)
+├── Acme.Infrastructure/            ← + interceptor registration, EF configs
+├── Acme.Api/                       ← + endpoint mapping only
 │
-├── ProReelEstate.Integration/               ← NEW: outbox, inbox, workers, mappers, ACL
+├── Acme.Integration/               ← NEW: outbox, inbox, workers, mappers, ACL
 │   ├── ChangeCapture/                       (interceptor, aggregate root resolver)
 │   ├── Outbox/                              (entities, materializer, dispatcher, feed)
 │   ├── Inbox/                               (ingress handler, inbox worker, translators)
@@ -159,8 +189,8 @@ src/
 │   ├── Backfill/                            (snapshot pager, checksums, runs)
 │   └── Persistence/                         (EF configs, migrations for `integration` schema)
 │
-├── ProReelEstate.Integration.Contracts/     ← NEW: generated from the peer's OpenAPI
-└── tests/ProReelEstate.Integration.Tests/   ← NEW: unit + Testcontainers + WireMock
+├── Acme.Integration.Contracts/     ← NEW: generated from the peer's OpenAPI
+└── tests/Acme.Integration.Tests/   ← NEW: unit + Testcontainers + WireMock
 ```
 
 **Dependency rule (architecture-tested):**
@@ -193,7 +223,7 @@ None are needed: handlers use the existing application pattern, mapping uses Map
 ## 4. Data model
 
 Full DDL for the `integration` schema. Managed by EF Core migrations in
-`ProReelEstate.Integration/Persistence/Migrations`, applied by a dedicated migration job
+`Acme.Integration/Persistence/Migrations`, applied by a dedicated migration job
 (not on app startup).
 
 ```sql
@@ -244,7 +274,7 @@ CREATE TABLE integration.outbox_message (
     aggregate_type    text        NOT NULL,
     aggregate_id      uuid        NOT NULL,
     aggregate_version bigint      NOT NULL,          -- monotonic; consumer idempotency key
-    message_type      text        NOT NULL,          -- proreel.property.changed
+    message_type      text        NOT NULL,          -- acme.foo.changed
     contract_version  text        NOT NULL,          -- '1'
     change_kind       text        NOT NULL,
     payload           jsonb       NOT NULL,          -- full envelope incl. data
@@ -291,7 +321,7 @@ CREATE TABLE integration.outbox_delivery (
     message_id       uuid        NOT NULL,
     message_sequence bigint      NOT NULL,
     subscriber_id    text        NOT NULL REFERENCES integration.subscriber(id),
-    aggregate_key    text        NOT NULL,            -- 'Property:9c1b…' — compaction key
+    aggregate_key    text        NOT NULL,            -- 'Foo:9c1b…' — compaction key
     aggregate_version bigint     NOT NULL,
     status           text        NOT NULL DEFAULT 'Pending'
                      CHECK (status IN ('Pending','InFlight','Delivered','Superseded','DeadLettered')),
@@ -326,13 +356,13 @@ CREATE INDEX ix_delivery_stuck
 
 ```sql
 CREATE TABLE integration.subscriber (
-    id                text        PRIMARY KEY,        -- 'crm-service'
+    id                text        PRIMARY KEY,        -- 'peer-a'
     display_name      text        NOT NULL,
     callback_url      text,                            -- NULL = pull-only subscriber
     contract_version  text        NOT NULL DEFAULT '1',
     auth_mode         text        NOT NULL,            -- OAuth2 | Mtls | Hmac
     auth_config_ref   text        NOT NULL,            -- secret manager key, NEVER the secret
-    aggregate_types   text[]      NOT NULL,            -- {'Property','Building'}
+    aggregate_types   text[]      NOT NULL,            -- {'Foo','Bar'}
     filter_expression jsonb,                           -- subscriber-scoped filters, MAPPING_MATRIX §5
     pii_granted       boolean     NOT NULL DEFAULT false,
     rate_limit_rps    int         NOT NULL DEFAULT 20,
@@ -496,7 +526,7 @@ Ship with (3), design the envelope so switching to (2) is a materializer change 
 1. Skip the subscriber entirely if its circuit breaker is open.
 2. Claim a batch (ADR-0003 §2 SQL), priority 0 before priority 9.
 3. POST the envelope with headers:
-   `Idempotency-Key: {messageId}`, `traceparent`, `Content-Type: application/vnd.proreel.property.v1+json`,
+   `Idempotency-Key: {messageId}`, `traceparent`, `Content-Type: application/vnd.acme.foo.v1+json`,
    plus auth per ADR-0005.
 4. Classify the response (ADR-0003 §6 table) → `Delivered`, backoff, or dead letter.
 5. `AllowAutoRedirect = false`; per-request timeout 10 s; per-attempt Polly retry for blips.
@@ -508,8 +538,8 @@ a per-item result array — otherwise one request per message with pipelined con
 ### 5.5 Change feed (pull)
 
 ```
-GET /integration/v1/properties/changes?cursor={seq}&limit=500
-Authorization: Bearer …                       scope: proreel.estate.feed.read
+GET /integration/v1/foos/changes?cursor={seq}&limit=500
+Authorization: Bearer …                       scope: acme.feed.read
 
 200 OK
 {
@@ -706,7 +736,7 @@ resets to `Pending`, `attempt = 0`. Requires `admin` scope; every replay is audi
 | Level | Tool | Coverage |
 |---|---|---|
 | Unit | xUnit + NSubstitute | mappers, enum tables, envelope building, error classification, backoff schedule |
-| Property-based | Bogus / AutoFixture | round-trip losslessness, boundary values, non-ASCII, DST edges |
+| Foo-based | Bogus / AutoFixture | round-trip losslessness, boundary values, non-ASCII, DST edges |
 | Coverage | reflection | every domain field mapped or excluded (ADR-0004 §5b) |
 | Architecture | NetArchTest | Domain/Application do not reference Integration or `System.Net.Http` |
 | Contract | JsonSchema.Net | generated payloads validate against the vendored peer schema |
@@ -764,23 +794,24 @@ performance argument for the two-stage design.
 
 ## 12. Rollout
 
-| Phase | Content | Exit criteria |
-|---|---|---|
-| 0 | Schema, interceptor, capture only. **No delivery.** | Change-log rows appear correctly in prod; zero impact on write latency |
-| 1 | Materialisation + outbox_message. Still no delivery. | Payloads validate against the peer schema for 100 % of real production changes |
-| 2 | Feed API enabled for one pilot subscriber (pull only) | Pilot consumer reads and applies; cursor advances; no gaps |
-| 3 | Push dispatch to the pilot subscriber | p95 delivery < 10 s; dead letters ≈ 0 |
-| 4 | Backfill run | Checksums converge; divergence 0 |
-| 5 | Inbound ingress + inbox | Peer messages applied; echo suppression verified |
-| 6 | Remaining subscribers; retention/partitioning; runbook handover | On-call trained; alerts firing correctly in a game day |
+The staging decision, its seven stages with exit criteria, the alternatives weighed, and the cost
+accepted live in **[ADR-0007](adr/ADR-0007-staged-delivery-and-the-first-increment.md)**. Task
+detail per stage is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Not restated here — two
+copies of a rollout order drift within a sprint.
 
-**Phase 0–1 are dark launches.** We accumulate real production payloads and validate them
-against the peer's schema before a single message is delivered — which is how contract
-surprises get found on our terms rather than during a joint go-live call.
+In summary: stage 1 is an on-demand, contract-shaped **read API** over the domain with no new
+tables, so contact with the peer's contract happens first rather than behind five days of
+infrastructure. Change capture is stage 2, the incremental feed stage 3, push delivery stage 4,
+inbound stage 5, backfill runs and reconciliation stage 6, hardening stage 7.
 
-Feature flags: `Integration:CaptureEnabled`, `Integration:MaterializationEnabled`,
-`Integration:DispatchEnabled`, `Integration:FeedEnabled`, `Integration:InboundEnabled`,
-plus per-subscriber `enabled`. Every phase is independently reversible without a deploy.
+What this section owns is the mechanism that makes any stage reversible.
+
+Feature flags: `Integration:ReadApiEnabled`, `Integration:CaptureEnabled`,
+`Integration:MaterializationEnabled`, `Integration:DispatchEnabled`, `Integration:FeedEnabled`,
+`Integration:InboundEnabled`, plus per-subscriber `enabled`. **Every stage is independently
+reversible without a deploy**, and stages 2 and 3 accumulate and validate real production payloads
+before anything is delivered — which is how contract surprises get found on our terms rather than
+during a joint go-live call.
 
 ---
 
@@ -806,8 +837,9 @@ plus per-subscriber `enabled`. Every phase is independently reversible without a
 ## 14. Decisions requested
 
 1. **Approve the architecture** (ADR-0001 … 0006).
-2. **Answer Q1–Q8** (§2.3) — Q3 (peer schema) and Q5 (PostgreSQL version) are needed in week 1;
-   Q1 and Q2 by end of week 1.
-3. **Confirm phasing** — in particular that phases 0–1 ship dark.
+2. **Approve the staging** (ADR-0007) — in particular that stage 1 is a read-only API and that
+   the "no lost changes" guarantee therefore arrives at stage 3, not stage 2.
+3. **Answer Q1–Q8 and Q17** (§2.3) — Q3 (peer schema), Q2 (auth) and Q17 (pilot consumer) are
+   stage 1 prerequisites; Q5 (PostgreSQL version) is needed before stage 3.
 4. **Nominate the peer-team counterpart** who owns the contract and can resolve the gaps in
-   MAPPING_MATRIX.md §7.
+   MAPPING_MATRIX.md §7. Stage 1 cannot exit without them.

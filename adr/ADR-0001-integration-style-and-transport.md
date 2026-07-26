@@ -2,14 +2,21 @@
 
 - **Status:** Proposed
 - **Date:** 2026-07-25
-- **Deciders:** ProReel Estate backend team, Integration architecture
+- **Deciders:** Acme backend team, Integration architecture
 - **Supersedes:** —
 - **Related:** ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0006
 
 ## Context
 
-ProReel Estate is a domain-driven ASP.NET Core service on PostgreSQL. Its aggregates
-(`Property`, `Building`, `Location`, and related entities) must be exchanged **bidirectionally**
+> **Domain independence.** This decision, and every ADR that follows it, is driven by four
+> structural facts — aggregates change transactionally, an external party must observe those
+> changes, the peer owns the wire format, and no broker exists. None of them is about subject
+> matter, so the design transfers to any domain unchanged. `Acme`, `Foo`, `Bar`, `Baz` and `peer-a`
+> are placeholders throughout; see
+> [CLAUDE.md](../CLAUDE.md#naming--all-names-are-placeholders).
+
+Acme is a domain-driven ASP.NET Core service on PostgreSQL. Its aggregates
+(`Foo`, `Bar`, `Baz`, and related entities) must be exchanged **bidirectionally**
 with other internal company services:
 
 - **Outbound:** other services need to observe changes to our catalogue.
@@ -99,7 +106,7 @@ believe delivery failed.
 - **No distributed transactions / two-phase commit.**
 - **No shared database** with peer services.
 - **No synchronous coupling on the write path.** A peer being down must never fail a
-  ProReel Estate business operation.
+  Acme business operation.
 - **Synchronous query calls to peer APIs are allowed** for read-side enrichment
   (e.g. resolving a reference), but only behind a typed client with timeout, retry,
   circuit breaker, and a defined fallback — never inside a write transaction.
@@ -110,7 +117,7 @@ believe delivery failed.
 
 *Rejected.* Dual-write problem: state committed but message lost, or message sent but
 transaction rolled back. Couples our write availability to every peer's uptime. Turns a
-1-peer outage into a ProReel Estate outage. It is also unfixable incrementally — retrofitting
+1-peer outage into a Acme outage. It is also unfixable incrementally — retrofitting
 reliability later means re-touching every handler.
 
 ### B. Debezium / PostgreSQL logical decoding (CDC)
@@ -181,8 +188,8 @@ consumer no signal that something changed. Kept as the secondary path.
 
 ## Compliance / verification
 
-- Architecture test (`NetArchTest`): no type in `ProReelEstate.Domain` or
-  `ProReelEstate.Application` may reference `System.Net.Http` or the integration assembly.
+- Architecture test (`NetArchTest`): no type in `Acme.Domain` or
+  `Acme.Application` may reference `System.Net.Http` or the integration assembly.
 - Architecture test: no `IHttpClientFactory` consumer may be resolved inside a class
   implementing `ICommandHandler<,>`.
 - Integration test: kill the dispatcher mid-flight, restart, assert the message is delivered

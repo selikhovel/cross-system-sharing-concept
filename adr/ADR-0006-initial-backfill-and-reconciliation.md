@@ -7,7 +7,7 @@
 ## Context
 
 Ongoing traffic is moderate, but at go-live the peer has **nothing**. The entire existing
-catalogue — every `Property`, `Building` and `Location` — has to reach them before incremental
+catalogue — every `Foo`, `Bar` and `Baz` — has to reach them before incremental
 changes mean anything. A consumer that starts applying deltas to an empty store produces a
 partial, silently wrong dataset.
 
@@ -44,8 +44,8 @@ freeze window, a maintenance mode, or a "stop writes during migration" conversat
 Backfill runs as a **paged pull** the consumer drives:
 
 ```
-GET /integration/v1/properties/snapshot?cursor={opaque}&limit=500
-Authorization: Bearer …            (scope: proreel.estate.backfill.read)
+GET /integration/v1/foos/snapshot?cursor={opaque}&limit=500
+Authorization: Bearer …            (scope: acme.backfill.read)
 
 200 OK
 {
@@ -93,7 +93,7 @@ Backfill is not a one-time concern — divergence accumulates from dead letters,
 bypassing capture (ADR-0002), and peer-side failures. A nightly job detects it cheaply:
 
 ```
-GET /integration/v1/properties/checksums?bucket=modulo256
+GET /integration/v1/foos/checksums?bucket=modulo256
 
 { "generatedAt": "…", "buckets": [ { "bucket": 0, "count": 4 102, "hash": "9f2c…" }, … ] }
 ```

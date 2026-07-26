@@ -13,9 +13,9 @@ and make peers conform; we must translate our domain into a schema someone else 
 will change without asking us. Two consequences follow immediately:
 
 1. **A strict Anti-Corruption Layer is mandatory.** If the foreign schema's vocabulary leaks
-   into `ProReelEstate.Domain` — even as an enum value or a nullable field added "because the
+   into `Acme.Domain` — even as an enum value or a nullable field added "because the
    partner needs it" — the domain model starts drifting toward a shape that serves an external
-   integration rather than the real-estate business. That drift is irreversible in practice.
+   integration rather than the business domain. That drift is irreversible in practice.
 2. **The mapping must be provably total.** "All fields mapped, nothing lost" cannot be a
    review-time assertion; it has to be a build-time and test-time guarantee (§5).
 
@@ -27,13 +27,13 @@ shape decision is made *conditionally*, with a clear default and a documented es
 ### 1. Three isolated model layers, translated only at the boundary
 
 ```
-ProReelEstate.Domain                 ← rich aggregates, business language, NEVER changed for integration
+Acme.Domain                 ← rich aggregates, business language, NEVER changed for integration
         │  (read-only projection query)
         ▼
-ProReelEstate.Integration.Snapshots  ← flat, internal, serialisation-friendly read models
+Acme.Integration.Snapshots  ← flat, internal, serialisation-friendly read models
         │  (Mapperly / explicit mappers = the Anti-Corruption Layer)
         ▼
-ProReelEstate.Integration.Contracts.External.V1   ← generated from the PEER's OpenAPI schema
+Acme.Integration.Contracts.External.V1   ← generated from the PEER's OpenAPI schema
 ```
 
 Rules, enforced by architecture tests:
@@ -68,26 +68,26 @@ carrying an event type.
 ```jsonc
 {
   "messageId":        "01927f3e-8a2b-7c1d-9e4f-000000000001",  // UUIDv7, stable across retries
-  "messageType":      "proreel.property.changed",
+  "messageType":      "acme.foo.changed",
   "specVersion":      "1.0",
   "contractVersion":  "1",
   "occurredAt":       "2026-07-25T09:14:02.113Z",              // business change time
   "producedAt":       "2026-07-25T09:14:03.907Z",              // materialisation time
-  "source":           "proreel-estate",
-  "aggregateType":    "Property",
+  "source":           "acme",
+  "aggregateType":    "Foo",
   "aggregateId":      "9c1b…",
   "aggregateVersion": 42,                                       // monotonic, idempotency key
   "changeKind":       "Updated",                                // Created | Updated | Deleted
   "correlationId":    "…",
   "traceParent":      "00-4bf92f…-00f067…-01",                  // W3C trace context
   "partial":          false,
-  "data":             { /* the peer's Property schema, fully populated */ }
+  "data":             { /* the peer's Foo schema, fully populated */ }
 }
 ```
 
 Rationale for snapshots as the default:
 
-| Property | Snapshot | Delta |
+| Foo | Snapshot | Delta |
 |---|---|---|
 | Survives a lost/skipped message | ✅ next message re-converges | ❌ permanent divergence |
 | Requires strict ordering | ❌ no (version wins) | ✅ yes — expensive (ADR-0003 §4) |
@@ -115,7 +115,7 @@ bandwidth, which for a property record (~2–8 KB) at this volume is irrelevant.
 ### 4. Versioning
 
 - **Contract version in three places:** URL path (`/integration/v1/...`), the `contractVersion`
-  envelope field, and the media type (`application/vnd.proreel.property.v1+json`).
+  envelope field, and the media type (`application/vnd.acme.foo.v1+json`).
 - **Additive changes** (new optional field) → no version bump; consumers must ignore unknown
   fields (`JsonSerializerOptions` on the inbound side does this by default and we assert it).
 - **Breaking changes** (field removed, renamed, type or semantics changed) → new major version.
@@ -124,7 +124,7 @@ bandwidth, which for a property record (~2–8 KB) at this volume is irrelevant.
   This is only possible because materialisation is deferred (ADR-0002) — a direct consequence
   we are deliberately cashing in.
 - **Deprecation window:** 2 releases or 90 days, whichever is longer, tracked per subscriber.
-- `messageType` uses reverse-DNS-ish naming: `proreel.{aggregate}.{event}`.
+- `messageType` uses reverse-DNS-ish naming: `acme.{aggregate}.{event}`.
 
 ### 5. Losslessness is enforced by the build, not by review
 
@@ -146,18 +146,18 @@ be explicit and reasoned:
 
 ```csharp
 [Mapper]
-public partial class PropertyContractMapper
+public partial class FooContractMapper
 {
     // Every ignore carries a documented reason — see MAPPING_MATRIX.md
-    [MapperIgnoreSource(nameof(PropertySnapshot.InternalScoringNotes))]  // internal-only, ADR-0005 §PII
-    [MapperIgnoreTarget(nameof(ExternalProperty.MlsNumber))]             // peer-owned, we never populate
-    public partial ExternalProperty ToContract(PropertySnapshot source);
+    [MapperIgnoreSource(nameof(FooSnapshot.InternalNotes))]  // internal-only, ADR-0005 §PII
+    [MapperIgnoreTarget(nameof(ExternalFoo.ExternalCode))]             // peer-owned, we never populate
+    public partial ExternalFoo ToContract(FooSnapshot source);
 }
 ```
 
 **(b) Reflection-based field-coverage test.** A test walks every public property of every
 domain aggregate (recursively) and asserts it is either present in the mapping registry or
-listed in `IntegrationFieldExclusions` with a written reason. **Adding a field to `Property`
+listed in `IntegrationFieldExclusions` with a written reason. **Adding a field to `Foo`
 and forgetting the integration fails a test with the field name in the message.** This is the
 single highest-value test in the whole workstream.
 
@@ -165,7 +165,7 @@ single highest-value test in the whole workstream.
 [Fact]
 public void Every_domain_field_is_either_mapped_or_explicitly_excluded()
 {
-    var unaccounted = DomainFieldWalker.Walk(typeof(Property))
+    var unaccounted = DomainFieldWalker.Walk(typeof(Foo))
         .Where(path => !MappingRegistry.Covers(path))
         .Where(path => !IntegrationFieldExclusions.Contains(path))
         .ToList();
@@ -193,7 +193,7 @@ Full field-by-field table in **MAPPING_MATRIX.md**. The rules that govern it:
 |---|---|
 | **Money** | Never `double`. Transport as decimal string (`"1250000.00"`) or minor units + ISO-4217 currency, whichever the peer's schema requires. Currency is always explicit — never implied by locale. |
 | **Area / measurements** | Store the unit alongside the value. If the peer uses ft² and we use m², convert with a single well-tested converter and **document the rounding rule** (half-away-from-zero, 2 dp). Never round-trip a converted value back into the domain. |
-| **Dates & times** | ISO-8601 with explicit offset, UTC on the wire. Date-only fields (`ListedOn`) stay `date`, never `timestamp` — adding a midnight time zone-shifts the date across the date line. |
+| **Dates & times** | ISO-8601 with explicit offset, UTC on the wire. Date-only fields (`EffectiveOn`) stay `date`, never `timestamp` — adding a midnight time zone-shifts the date across the date line. |
 | **Enums** | Explicit lookup table per enum. **Fail closed**: an unmapped domain enum value is a materialisation error and a dead letter, never a silent `"Other"`. Inbound: an unknown peer value maps to a quarantine status, never a guessed one. |
 | **Null vs absent** | Defined once, globally: `null` = *explicitly cleared*, key absent = *unchanged/unknown*. With snapshot payloads we always emit the full object, so absence never occurs — this rule exists for the inbound direction and for a possible delta variant. |
 | **Strings** | Silent truncation is **forbidden**. If a domain value exceeds the peer's `maxLength`, materialisation fails and dead-letters with the field name and both lengths. Truncating an address is a data-quality incident, not a rounding detail. |

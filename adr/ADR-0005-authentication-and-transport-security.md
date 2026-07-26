@@ -10,7 +10,7 @@
 
 Both directions of the integration cross a service boundary and carry data that is at least
 commercially sensitive (pricing, ownership, addresses) and, depending on the aggregate,
-personal data (owner and agent contact details) subject to GDPR-equivalent handling.
+personal data (owner and contact contact details) subject to GDPR-equivalent handling.
 
 Nothing about "it is inside the corporate network" makes an unauthenticated endpoint
 acceptable — a webhook receiver that trusts its caller is a write path into our domain model
@@ -41,10 +41,10 @@ Scope design (least privilege, per capability, not per service):
 
 | Scope | Grants |
 |---|---|
-| `proreel.estate.feed.read` | `GET /integration/v1/*/changes`, `GET /integration/v1/*/{id}` |
-| `proreel.estate.inbound.write` | `POST /integration/v1/inbound/*` |
-| `proreel.estate.backfill.read` | `GET /integration/v1/backfill/*` |
-| `proreel.estate.admin` | dead-letter replay, subscriber management — humans/ops only |
+| `acme.feed.read` | `GET /integration/v1/*/changes`, `GET /integration/v1/*/{id}` |
+| `acme.inbound.write` | `POST /integration/v1/inbound/*` |
+| `acme.backfill.read` | `GET /integration/v1/backfill/*` |
+| `acme.admin` | dead-letter replay, subscriber management — humans/ops only |
 
 Outbound (us → peer): we are the client. Tokens are acquired per subscriber, cached in memory
 with refresh at 80 % of lifetime, and never logged. Implementation is a
@@ -111,7 +111,7 @@ expiry date and a ticket. Record it as technical debt in the proposal's risk reg
 
 Structured logs record `messageId`, `aggregateType`, `aggregateId`, `subscriberId`, status
 code and duration — **never the payload body**. Payload access is available on demand via an
-admin endpoint requiring `proreel.estate.admin`, and that access is itself audit-logged.
+admin endpoint requiring `acme.admin`, and that access is itself audit-logged.
 W3C `traceparent` is propagated end to end so a message can be followed across services without
 anyone needing to read its contents.
 
