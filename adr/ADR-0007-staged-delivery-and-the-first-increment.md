@@ -69,8 +69,13 @@ Two consequences of that table are the point of the stage:
    an additive change requiring no version bump (ADR-0004 §4).
 
 **Exit criteria:** a consumer reconstructs the full `Foo` catalogue from the paged endpoint;
-`MAPPING_MATRIX.md` is filled in for `Foo` with zero unresolved `GAP-*` rows; the coverage
-and round-trip tests are green; no field marked `pii` appears in any response.
+`MAPPING_MATRIX.md` is filled in for `Foo` with zero unresolved `GAP-*` rows **against a named
+vendored revision of the peer's schema**; the coverage and round-trip tests are green; personal data
+appears only where an explicit grant permits it.
+
+> The revision qualifier is not pedantry. While the peer is still in development their schema moves
+> (ADR-0004 §2), so "the mapping is complete" is only ever true of a stated revision. Without the
+> qualifier the stage can never be declared finished, because the target keeps moving.
 
 ### Stages 2–7
 

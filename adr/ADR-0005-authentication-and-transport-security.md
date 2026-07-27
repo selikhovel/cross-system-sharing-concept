@@ -21,7 +21,99 @@ fallback ladder, and the non-negotiables that hold regardless of which is chosen
 
 ## Decision
 
-### 1. Recommended: OAuth 2.0 client credentials against the corporate IdP
+### 1. Options compared, and the recommendation
+
+Seven mechanisms are viable for internal service-to-service HTTP. They differ less in cryptographic
+strength than in two operational properties, and those are what decide it:
+
+- **Who owns rotation.** Every mechanism here is secure on the day it is configured. The ones that
+  fail in production fail because a credential expired and nobody owned renewing it.
+- **Whether authorisation is expressible at all.** Authentication answers *who is calling*.
+  This integration also needs *what they may do* — read the feed without being able to write into
+  the domain. A mechanism that cannot express that pushes the distinction into bespoke code.
+
+| # | Mechanism | Identity is | Rotation owned by | Authorisation | Hard prerequisite |
+|---|---|---|---|---|---|
+| **A** | OAuth 2.0 client credentials, JWT | a token claim | the IdP | scopes, per capability | a corporate IdP |
+| **B** | mTLS | a client certificate | you, or the service mesh | certificate subject only | a mesh, or an internal PKI with automated renewal |
+| **C** | mTLS + certificate-bound tokens (RFC 8705) | both | IdP and PKI | scopes, bound to the certificate | both of the above |
+| **D** | API key + HMAC request signing | a key id | you | none, unless invented | none |
+| **E** | Bare static API key | a key | you | none | none |
+| **F** | Gateway-enforced (APIM, Kong, Apigee, YARP) | whatever the gateway asserts | the gateway's team | the gateway's policy model | a gateway **and** a network policy |
+| **G** | Workload identity (SPIFFE/SPIRE, projected service-account tokens) | the platform | the platform | varies by implementation | both parties in one trust domain |
+
+**A — OAuth 2.0 client credentials.**
+*For:* rotation is the IdP's problem, so no long-lived secret sits in two config stores drifting
+apart; scopes express authorisation directly; revocation is immediate and central; the audit trail
+is in one place, which is the first thing a security review asks for; and a second consumer costs a
+client registration rather than a new integration.
+*Against:* it is not a choice if no IdP exists — it is a project. A bearer token is transferable, so
+anyone who captures one can use it until it expires (mitigated by short lifetimes, TLS, and an
+`audience` check). Outbound dispatch acquires a dependency on IdP availability, mitigated by token
+caching; inbound needs only cached JWKS. Clock skew and JWKS rotation are small but real operational
+work.
+
+**B — mTLS.**
+*For:* identity is the certificate, so there is no bearer credential to steal or replay; the binding
+to the transport is stronger than any token can be; **if a service mesh already terminates mTLS this
+is free and requires no application code**; and it needs no IdP.
+*Against:* without a mesh you own issuance, distribution and renewal, and expired certificates at
+two in the morning are the characteristic failure. Identity is coarse — one certificate is one
+identity with no scopes, so application-level authorisation on the subject or SAN is still required.
+A load balancer terminating TLS must forward the client certificate, which is sometimes a fight with
+the platform. Rotation is a coordinated change with the peer rather than a unilateral one.
+
+**C — mTLS with certificate-bound tokens.**
+*For:* stealing a token becomes useless because it is bound to the client certificate. This is what
+regulated sectors mandate.
+*Against:* needs both a PKI and an IdP, and has the largest number of moving parts of any option
+here. Disproportionate for an internal one-to-one exchange unless the data is regulated.
+
+**D — API key with HMAC request signing.**
+*For:* needs neither IdP nor PKI, so it is available immediately. The signature covers the body, so
+it survives proxies and header rewriting. Replay is addressed with a timestamp window and a seen-id
+cache.
+*Against:* a bespoke scheme carries bespoke bugs, and canonicalisation mistakes are not caught by a
+test — they are caught by an incident. There is no shared library, so both sides must implement the
+*same* canonical string exactly. Key distribution, rotation and revocation are all yours. No scopes
+unless invented.
+
+**E — Bare static API key.** Replayable by anyone who reads one log line, appears in URLs and traces,
+and has no rotation story. Acceptable only as a time-boxed bridge with a written expiry date and a
+tracked ticket, recorded as technical debt in the risk register.
+
+**G — Workload identity.** Technically the cleanest of the set: there is no credential to store,
+because the platform asserts identity. **Where the platform supports it and both parties share a
+trust domain, prefer it over A.** It is listed after A only because platform support cannot be
+assumed; confirm with the platform team before designing around its absence.
+
+#### Enforcement point is a separate axis from mechanism
+
+**F is not a tier in the ladder** — a gateway is *where* authentication is enforced, not *what* is
+enforced. A gateway can carry A or B on the service's behalf, and in an enterprise it is often the
+answer already in place.
+
+*For:* authentication becomes a platform concern rather than application code, applied consistently
+across services, with rate limiting and quota management in the same place.
+*Against:* **the service must be unreachable except through the gateway, or trusting its asserted
+identity header is a fiction** — this requires a network policy, not an assumption. Another team owns
+your authentication, and debugging spans two systems.
+
+Establish whether a gateway already fronts internal traffic **before** choosing among A–E, because
+if one does, the decision may not be the service's to make.
+
+#### How to choose
+
+1. Does the platform offer **workload identity** to both parties? → **G**.
+2. Does a corporate **IdP** issue client-credentials tokens? → **A**. The deciding argument is not
+   strength but marginal cost: the second consumer costs a client registration instead of a new
+   integration.
+3. No IdP, but a **service mesh or an internal PKI with automated renewal**? → **B**.
+4. Neither → **D**, with a written date for moving to A. Not E.
+
+At every step, if a gateway fronts the service, the chosen mechanism is enforced there (**F**).
+
+#### The recommendation
 
 **Primary recommendation: OAuth 2.0 `client_credentials` (RFC 6749 §4.4) with JWT access
 tokens issued by the company IdP (Keycloak / Entra ID / equivalent), scoped per capability.**
@@ -56,6 +148,11 @@ plus explicit `issuer`, `audience`, `exp`, `nbf` checks and an **allowlist of ac
 sufficient to POST into our domain.
 
 ### 2. Fallback ladder (if OAuth 2.0 is unavailable)
+
+The ladder orders the **mechanisms** compared in §1 by descending preference. It does not include
+the gateway (§1, option F), which is an enforcement point rather than a mechanism and composes with
+any tier; nor workload identity (option G), which sits *above* Tier 1 wherever the platform offers
+it.
 
 **Tier 2 — mTLS.** Fully acceptable, and *preferable* if a service mesh (Istio/Linkerd) already
 terminates it: identity is the client certificate, no token plumbing at all. Standalone mTLS
@@ -116,6 +213,9 @@ W3C `traceparent` is propagated end to end so a message can be followed across s
 anyone needing to read its contents.
 
 ## Alternatives considered
+
+The seven **viable** mechanisms are compared in §1 rather than repeated here; this section records
+what was rejected outright.
 
 - **No auth, network policy only.** Rejected: a single misconfigured NetworkPolicy or a
   compromised neighbouring pod yields full write access to our domain. Defence in depth is

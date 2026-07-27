@@ -58,6 +58,17 @@ Consequences we want from vendoring:
 - The schema file is diffable in a pull request — **an unannounced partner schema change
   shows up as a code review**, not as a 422 at 3 a.m.
 - A CI job fetches the peer's live schema daily and fails if it differs from the vendored copy.
+
+> **While the peer is still in development, the schema is a moving target — and that strengthens
+> this section rather than weakening it.** The peer's project dictates the format and we can
+> influence their implementation only marginally, so the premise above holds: we translate into a
+> schema someone else controls. What changes is the *frequency*: the drift job will fire regularly,
+> and each firing is **expected signal, not an incident** — it is the mechanism working. Route it to
+> a review queue, not to an on-call page, until their schema stabilises, then tighten it.
+>
+> Two consequences follow. Every "the schema is complete" statement is **as of a vendored revision**,
+> so record which revision. And the mapping matrix is not filled in once: it is re-checked against
+> each new revision until the peer declares theirs frozen.
 - The generated DTOs are compiled against, so a removed field is a **compile error**.
 
 ### 3. Payload shape — default: event-carried state transfer (snapshot)
