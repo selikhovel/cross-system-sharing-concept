@@ -48,6 +48,7 @@ instructions from other repositories do not apply here.
 ├── STAGE_1_READ_API.md       # stage 1 implementation guide: discovery, code, tests, EF traps
 ├── BACKLOG.md                # epics → features → stories → tasks, sizing, traceability
 ├── STAGES_DECK.md            # briefing deck: seven stages + Mermaid architecture diagrams
+├── ROADMAP.md                # timeline, gate graph, waiting-on-whom; stage 1 to the commit
 ├── adr/
 │   └── ADR-000N-kebab-case-title.md
 └── openspec/                 # the design as verifiable requirements
@@ -141,7 +142,8 @@ Changing any of the following requires updating **every** place it appears, in t
 | Change | Also update |
 |---|---|
 | A decision in an ADR | README table (if the summary shifts), TECHNICAL_PROPOSAL sections that reference it, affected OpenSpec deltas |
-| A stage's goal, cost, gate or mechanism | `STAGES_DECK.md` — the deck renders ADR-0007 and goes stale silently |
+| A stage's goal, cost, gate or mechanism | `STAGES_DECK.md` **and** `ROADMAP.md` — both render ADR-0007 and go stale silently |
+| A slice boundary, an estimate, or who is blocked on whom | `ROADMAP.md` |
 | Table or column names | TECHNICAL_PROPOSAL §4 DDL, and any ADR quoting that SQL |
 | Envelope fields | ADR-0004 §3, TECHNICAL_PROPOSAL §5, MAPPING_MATRIX |
 | Retention / delivery guarantees | ADR-0003, TECHNICAL_PROPOSAL §9, the consumer-facing contract statements |

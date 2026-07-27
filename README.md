@@ -40,6 +40,7 @@ leaving without a legal basis.
 | [STAGE_1_READ_API.md](STAGE_1_READ_API.md) | **Start here to write code.** Stage 1 in full: what to check in an existing Clean Architecture / CQRS / EF Core service, where each file goes, the code, the tests, and the EF-specific traps |
 | [BACKLOG.md](BACKLOG.md) | **Start here to plan.** The whole integration as epics → features → stories → tasks, with sizing, traceability to requirements, and which open questions block which item |
 | [STAGES_DECK.md](STAGES_DECK.md) | **Start here to brief someone.** All seven stages with Mermaid architecture diagrams: goal, what a consumer can newly do, what the ordering costs, and when each guarantee arrives. Derived from ADR-0007, which stays authoritative |
+| [ROADMAP.md](ROADMAP.md) | **Start here to schedule.** The same seven stages as a timeline, a gate graph and a waiting-on-whom map, plus stage 1 down to the commit. Effort and calendar reported separately |
 | [openspec/](openspec/project.md) | The design restated as verifiable requirements, plus a [critical review](openspec/changes/add-cross-system-integration-layer/design.md) listing 14 defects found in the documents above |
 | [ADR-0001](adr/ADR-0001-integration-style-and-transport.md) | Why outbox + hybrid push/pull HTTP instead of direct calls, CDC, or waiting for Kafka |
 | [ADR-0002](adr/ADR-0002-change-capture-without-touching-the-domain.md) | How changes are captured without adding anything to the domain model |
