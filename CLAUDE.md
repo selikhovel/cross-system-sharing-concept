@@ -47,6 +47,7 @@ instructions from other repositories do not apply here.
 ├── IMPLEMENTATION_PLAN.md    # task detail per stage (staging itself is ADR-0007)
 ├── STAGE_1_READ_API.md       # stage 1 implementation guide: discovery, code, tests, EF traps
 ├── BACKLOG.md                # epics → features → stories → tasks, sizing, traceability
+├── STAGES_DECK.md            # briefing deck: seven stages + Mermaid architecture diagrams
 ├── adr/
 │   └── ADR-000N-kebab-case-title.md
 └── openspec/                 # the design as verifiable requirements
@@ -70,6 +71,11 @@ change's `design.md` and amend the source; never let a spec silently override an
 | `openspec/changes/*/specs/` | verifiable requirements — `SHALL` plus scenarios |
 
 Backlog tasks carry a **pointer** to the guide section and the OpenSpec scenario, never a copy.
+
+`STAGES_DECK.md` is the one **deliberate exception**: a briefing deck has to restate content in
+condensed form to be useful. It is therefore marked derived and presentational, and ADR-0007 wins
+every disagreement. Update it in the same commit as the decision it renders — a stale deck is worse
+than no deck, because it is the version people quote from memory.
 
 Adding a top-level document means adding a row to the README table in the same commit.
 
@@ -134,7 +140,8 @@ Changing any of the following requires updating **every** place it appears, in t
 
 | Change | Also update |
 |---|---|
-| A decision in an ADR | README table (if the summary shifts), TECHNICAL_PROPOSAL sections that reference it |
+| A decision in an ADR | README table (if the summary shifts), TECHNICAL_PROPOSAL sections that reference it, affected OpenSpec deltas |
+| A stage's goal, cost, gate or mechanism | `STAGES_DECK.md` — the deck renders ADR-0007 and goes stale silently |
 | Table or column names | TECHNICAL_PROPOSAL §4 DDL, and any ADR quoting that SQL |
 | Envelope fields | ADR-0004 §3, TECHNICAL_PROPOSAL §5, MAPPING_MATRIX |
 | Retention / delivery guarantees | ADR-0003, TECHNICAL_PROPOSAL §9, the consumer-facing contract statements |
