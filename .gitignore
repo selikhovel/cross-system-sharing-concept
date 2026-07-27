@@ -1,0 +1,85 @@
+# .gitignore — documentation-only repository
+#
+# This repository holds prose: ADRs, specifications and Mermaid diagrams. It contains no
+# application code and no build (CLAUDE.md, "Scope discipline"), so this file guards against
+# things that would land here by accident rather than by design.
+#
+# Read "DELIBERATELY NOT IGNORED" at the bottom before adding a pattern.
+
+### Secrets — ADR-0005 §3 makes this non-negotiable
+# "Secrets never in source control, appsettings, logs, exception messages or the outbox."
+# This repository documents authentication, so a credential pasted into a scratch file while
+# drafting is a realistic accident. A backstop, not a substitute for care.
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+secrets.json
+appsettings.*.local.json
+
+### Local agent and editor state
+.claude/settings.local.json
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+
+### Merge and edit residue
+# Prose merges leave these behind, and a committed .orig is confusing rather than harmful —
+# which is exactly why nobody notices it for months.
+*.orig
+*.rej
+*.bak
+*.tmp
+# Office lock files, if a document is ever opened from an export
+~$*
+
+### Operating system noise
+# Windows
+Thumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+# Linux
+.directory
+.Trash-*
+
+### Tooling scratch
+# No tooling is configured here and none should be added without being asked (CLAUDE.md).
+# These two lines exist only so a stray `npx` or `python -m venv` cannot be committed.
+node_modules/
+.venv/
+
+# -----------------------------------------------------------------------------------------
+# DELIBERATELY NOT IGNORED
+# -----------------------------------------------------------------------------------------
+#
+# .NET build output (bin/, obj/, *.user, *.suo)
+#     Absent on purpose. A compilable project does not belong in this repository — it belongs
+#     in the service's own (CLAUDE.md, "Scope discipline"). Pre-hiding build artefacts would
+#     quietly signal the opposite, and the day someone commits a .csproj here we would rather
+#     notice it than have it slide in with its output already invisible.
+#
+# MUST STAY TRACKED — do not add a pattern that would catch these:
+#
+#   contracts/external/{system}/openapi.v1.yaml
+#     The vendored peer schema. ADR-0004 §2 depends on it being committed and diffable: an
+#     unannounced partner schema change is supposed to arrive as a pull-request diff rather
+#     than as a 422 at three in the morning. A broad `*.yaml` or `contracts/` rule would
+#     silently disable that mechanism, and nobody would find out until the peer changed
+#     something.
+#
+#   .claude/settings.json
+#     Shared project settings, as opposed to settings.local.json above.
+#
+#   openspec/**
+#     Requirements and change folders. Written by hand, not produced by a tool.
