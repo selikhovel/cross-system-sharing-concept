@@ -108,7 +108,7 @@ Redaction SHALL happen at materialisation, never at dispatch.
 
 #### Scenario: Two subscribers differing only in PII grant
 
-- **WHEN** an aggregate carrying contact contact details is materialised for a subscriber with the
+- **WHEN** an aggregate carrying contact details is materialised for a subscriber with the
   PII grant and one without
 - **THEN** two payload variants exist, each with its own hash
 - **AND** the non-granted subscriber's payload contains no field flagged `pii` in

@@ -166,7 +166,7 @@ subject's data from integration payloads on an erasure request.
 
 #### Scenario: Subscriber without a grant
 
-- **WHEN** an aggregate carrying contact contact details is delivered to a subscriber without the
+- **WHEN** an aggregate carrying contact details is delivered to a subscriber without the
   grant
 - **THEN** the payload contains no personal field, verified by test
 

@@ -384,7 +384,7 @@ schema".
 > that** we are not transferring it before the legal basis is confirmed.
 
 **Acceptance criteria**
-- No field marked `pii` in `MAPPING_MATRIX.md` resolves in any response *(scenario: Foo with contact contact details)*
+- No field marked `pii` in `MAPPING_MATRIX.md` resolves in any response *(scenario: Foo with contact details)*
 - The personal-data registry and the mapping matrix agree, asserted by test
 - Adding a new personal field fails the redaction test until it is omitted *(scenario: New personal field added)*
 - If the peer marks a personal field `required`, this story **blocks the epic** until Q6 is resolved —

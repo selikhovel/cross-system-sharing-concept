@@ -10,7 +10,7 @@
 
 Both directions of the integration cross a service boundary and carry data that is at least
 commercially sensitive (pricing, ownership, addresses) and, depending on the aggregate,
-personal data (owner and contact contact details) subject to GDPR-equivalent handling.
+personal data (owner and contact details) subject to GDPR-equivalent handling.
 
 Nothing about "it is inside the corporate network" makes an unauthenticated endpoint
 acceptable — a webhook receiver that trusts its caller is a write path into our domain model

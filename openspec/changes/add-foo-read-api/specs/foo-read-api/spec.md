@@ -194,7 +194,7 @@ Authentication SHALL sit behind a seam so the mechanism can change without touch
 The system SHALL omit every field marked as personal data in the mapping matrix from every stage 1
 response, unconditionally, because no subscriber registry exists yet to hold a grant.
 
-#### Scenario: Foo with contact contact details
+#### Scenario: Foo with contact details
 
 - **WHEN** a property whose contact has a name, phone and email is returned
 - **THEN** none of those fields appear in the response
