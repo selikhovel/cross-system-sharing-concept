@@ -95,7 +95,7 @@ Same structure. Key decisions to record when filling in:
 - **Denormalisation depth.** Does the peer want `Foo` to embed `Bar`/`Baz` details,
   or only references? Embedding means a `Bar` change must re-emit every `Foo` in it —
   a fan-out that has to be handled in the materializer (`Bar` changed → enqueue change-log
-  rows for all child properties). Cheap to implement, expensive to discover later.
+  rows for every `Foo` that references it). Cheap to implement, expensive to discover later.
   **Confirm with the peer before implementation day 2.**
 - **Baz hierarchy.** If `Baz` is a tree (country → region → city → district) and the
   peer expects a flat set of names, record the flattening rule here, including behaviour when a
@@ -194,7 +194,7 @@ Restated from ADR-0004 §6 so implementers have one place to look:
 | 7.4 | Semantics | `Held` vs `‹IN_PROGRESS›` | Do the two definitions describe the same state, or only a similar one? | | ⬜ open |
 | 7.5 | Shape | Snapshot vs delta | ADR-0004 §3 — **highest-impact open question** | | ⬜ open |
 | 7.6 | Shape | Denormalisation depth | Embed `Bar`/`Baz`, or references only? Drives fan-out design | | ⬜ open |
-| 7.7 | PII | Contact contact details | Is the peer authorised to receive them? Legal basis + retention? | | ⬜ open |
+| 7.7 | PII | contact details | Is the peer authorised to receive them? Legal basis + retention? | | ⬜ open |
 | 7.8 | Media | Attachment URLs | Are our URLs reachable from the peer, or must we push binaries? | | ⬜ open |
 
 ---
