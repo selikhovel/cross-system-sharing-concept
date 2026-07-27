@@ -4,6 +4,11 @@ Stage 1 of [ADR-0007](../../../adr/ADR-0007-staged-delivery-and-the-first-increm
 Implementation detail — discovery checklist, file layout, code, tests, EF traps — is
 [STAGE_1_READ_API.md](../../../STAGE_1_READ_API.md).
 
+> **Slice 1 is split out** into [`add-foo-snapshot-projection`](../add-foo-snapshot-projection/proposal.md),
+> written to be self-contained so it can be handed to an implementer with the service codebase and
+> nothing else. This change remains the stage-level view; its "Reads project directly into a flat
+> snapshot" requirement is satisfied there.
+
 ## Why
 
 Nothing in the integration design is consumable until a peer can look at a payload. The blocking
