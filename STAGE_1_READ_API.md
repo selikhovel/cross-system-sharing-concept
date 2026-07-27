@@ -59,7 +59,7 @@ the version rule becomes usable; stage 3 adds the incremental feed and tombstone
 "no lost changes" become true.
 
 **Where the CQRS instinct leads you wrong.** The reflex in a CQRS codebase is a query handler in
-`Application` returning the contract shape. §2.3 argues against it: the shape is dictated by a
+`Application` returning the contract shape. §2.4 argues against it: the shape is dictated by a
 foreign schema, so it does not belong in the layer that owns our use cases.
 
 ---
@@ -76,7 +76,7 @@ answer on day 4 costs a rewrite. Fill the "Answer" column in a scratch copy.
 | 1.1.1 | Project graph and which ring owns `DbContext` | `dotnet list <sln> reference`, or read the `.csproj` files | Decides where the projection lives (§2.2) |
 | 1.1.2 | Does `Domain` reference anything outward? | The NetArchTest in §6.5 — write it first, it is trivially green or it finds a pre-existing violation | If it is already violated, stage 1's boundary claim is not new work but cleanup |
 | 1.1.3 | Minimal APIs or controllers? Existing route grouping and versioning convention | Read `Program.cs` / `Startup` | §4.8 is written for `RouteGroupBuilder`; controllers need the same code in an `ApiController` |
-| 1.1.4 | Existing CQRS dispatch abstraction and its licence | Look for `IQueryHandler<,>`, `ISender`, `IRequestHandler<,>` | **If `MediatR` ≥ v13, it is commercial.** Stage 1 needs no dispatcher at all (§2.3) — do not add one |
+| 1.1.4 | Existing CQRS dispatch abstraction and its licence | Look for `IQueryHandler<,>`, `ISender`, `IRequestHandler<,>` | **If `MediatR` ≥ v13, it is commercial.** Stage 1 needs no dispatcher at all (§2.4) — do not add one |
 | 1.1.5 | Is there a read-side/query project already (`Application.Queries`, a read DbContext, Dapper)? | Grep for `AsNoTracking` | If a read-side convention exists, follow it instead of inventing one |
 
 ### 1.2 The `Foo` aggregate
@@ -191,7 +191,57 @@ your build enforces that nothing but `Infrastructure` may reference EF Core. The
 `Integration`. The projection expression (§4.2) stays in `Integration` either way — it is the shape
 of the contract, not of the database.
 
-### 2.3 Why this does *not* go through a CQRS query handler
+### 2.3 If the service is a modular monolith
+
+The reference graph above assumes one Clean Architecture ring set. In a modular monolith the design
+splits along a seam it already has:
+
+| Part | Knows about `Foo`? | Belongs to |
+|---|---|---|
+| **Mechanism** — outbox tables, `SKIP LOCKED` claiming, dispatcher, retries, the cursor feed and its watermark, inbox, backfill | No. Entirely domain-agnostic | A shared building block, one per monolith |
+| **Policy** — the snapshot, the projection, the ACL mapper, enum tables, filter rules, which fields are personal data | Yes, completely | **Inside the module that owns `Foo`** |
+
+Stage 1 is **all policy and no mechanism**, so it needs no building block at all. Add
+`<Module>.Integration` alongside the module's existing projects, plus `<Module>.Integration.Contracts`
+for the generated peer types.
+
+**The contracts project is the one boundary worth a project reference even if everything else is
+folders.** ADR-0004 §1's rule — an external contract type never appears in a domain signature, an
+application command, an EF entity or a public API response — is the one that gets broken by
+inattention, and a project reference catches it at compile time where a namespace convention does
+not.
+
+**Do not extract the building block before a second module needs it.** With one module it is an
+abstraction with no second consumer, and it will be redesigned the moment a real second module
+arrives with its own requirements. Instead keep the seam visible as folders, so that extraction is a
+move rather than a rewrite:
+
+```
+<Module>.Integration/
+├── Snapshots/     policy      snapshot, projection, store
+├── Mapping/       policy      mapper, enum tables, converters, guards, exclusions
+├── Security/      mixed       authenticator seam (mechanism) · PII registry, redactor (policy)
+├── Paging/        mechanism   cursor
+├── Contracts/     mechanism   envelope, page response, JSON context
+├── Endpoints/     mixed       routes (policy) · feature-flag filter (mechanism)
+└── Errors/        mechanism
+```
+
+Later stages add `Outbox/`, `Delivery/`, `Inbox/` and `Backfill/`, all mechanism. By stage 4 the
+mechanism is the bulk of the project and none of it names `Foo` — which is when extraction pays.
+What keeps it that way is ADR-0002 §1's **aggregate registration map**: the mechanism receives its
+aggregates from a map rather than referring to them by type.
+
+Two consequences for discovery (§1) when modules are in play:
+
+- **Where do `Bar` and `Baz` live?** If they belong to another module, the projection may not read
+  them directly — that is a module-boundary breach — and must go through that module's published
+  contract instead. This changes the projection and the stage 3 fan-out story, so answer it before
+  writing the projection.
+- **One `DbContext` per module?** Then the shared-outbox decision in ADR-0003 §1 applies, and the
+  `integration` schema wants its own migrations history table from the first migration in stage 2.
+
+### 2.4 Why this does *not* go through a CQRS query handler
 
 Your service has CQRS, so the reflex is `GetFooSnapshotQuery : IQuery<FooSnapshot>` in
 `Application`. Do not do that in stage 1:
@@ -940,7 +990,7 @@ review time.
 
 | Not added | Why |
 |---|---|
-| `MediatR` | Commercial from v13 — and stage 1 needs no dispatcher at all (§2.3). If the solution is already on v12 or lower, do not route this read through it |
+| `MediatR` | Commercial from v13 — and stage 1 needs no dispatcher at all (§2.4). If the solution is already on v12 or lower, do not route this read through it |
 | `AutoMapper` | Commercial from v14; runtime reflection; unmapped members become a runtime concern |
 | `MassTransit` | Commercial from v9, and there is no broker in any stage of this design |
 | `Dapper` | EF projections already reuse the model, the value converters and the query filters. A second data-access path means two places to keep the mapping honest |

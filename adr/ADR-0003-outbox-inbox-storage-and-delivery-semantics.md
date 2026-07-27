@@ -45,9 +45,30 @@ await _integrationDb.Database.UseTransactionAsync(tx.GetDbTransaction(), ct);
 ```
 
 > Simpler alternative, recommended for phase 1: put the `integration` entities in the
-> **existing** `AppDbContext` with `.ToTable("outbox_message", "integration")`. One context,
+> **existing** domain `DbContext` with `.ToTable("outbox_message", "integration")`. One context,
 > one transaction, zero plumbing. Split into a second context only if the domain context's
 > model becomes unwieldy. **We start with one context.**
+
+#### In a modular monolith
+
+There is no single `AppDbContext` to fall back on, so the sentence above needs a topology to attach
+to. The decision is **one shared outbox for the whole monolith**, in the same `integration` schema,
+written by the `DbContext` of whichever module produced the change.
+
+The deciding argument is the consumer's cursor. The outbox's value is that it is *one* ordered log
+with *one* cursor and *one* retention window. Splitting it per module pushes N cursors, N windows and
+N catch-up procedures onto every consumer, and turns "resume after a day offline" from one operation
+into N independent ones. Module autonomy is worth a lot; it is not worth that.
+
+| Aspect | Consequence |
+|---|---|
+| Migration ownership | The `integration` schema is owned by a shared building block, not by a module. Give it its own migrations history table (`__EFMigrationsHistory` in the `integration` schema) so ownership can move without rewriting history |
+| Module contexts | Every publishing module's context maps the integration entities. The write must land in the same transaction as the business row, which is the entire point |
+| Cost accepted | Two or more contexts map tables they do not own. This is real coupling between modules, and it is the price of a single consumer-facing log |
+
+**With one module, this costs nothing today** — the recommendation above applies verbatim, the
+module's own context maps the tables, and the shared building block is extracted when a second module
+actually needs it. Extracting early buys an abstraction with no second consumer.
 
 ### 2. Claiming: `FOR UPDATE … SKIP LOCKED`, no leader election
 
