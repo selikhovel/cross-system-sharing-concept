@@ -97,14 +97,29 @@ exist because of them.
 | # | Question | Blocks | Default if unanswered |
 |---|---|---|---|
 | Q1 | Snapshot or delta payloads? (ADR-0004 §3) | Dispatcher ordering, feed design | **Build for snapshots** |
-| Q2 | Which auth mechanism is available? (ADR-0005) | Ingress + outbound clients | **OAuth2 client credentials**, HMAC fallback |
-| Q3 | Peer OpenAPI schema — where is it? | All mapping work | Blocks mapper implementation entirely |
+| Q2 | Which auth mechanism? Three sub-questions close it: does the platform offer workload identity, does an IdP issue client-credentials tokens, does a gateway front internal traffic? (ADR-0005 §1) | Stage 1 slice 3 onward | **OAuth2 client credentials**, HMAC fallback |
+| Q3 | The peer's schema — **which revision, and when is it frozen?** Their project dictates the format and is itself in development, so this is a moving target (ADR-0004 §2) | All mapping work; stage 1's exit criterion | Build against a stub; the stage cannot exit |
 | Q4 | Embed `Bar`/`Baz` in `Foo`, or references only? | Materializer fan-out | **References only** |
-| Q5 | PostgreSQL major version in production? | `xid8` watermark (needs 13+) | Verify before day 1 |
-| Q6 | Is the peer authorised to receive contact PII? | Mapping + redaction | **Redact until confirmed** |
-| Q7 | Does the peer push to us, do we poll them, or both? | Inbound design | **Build ingress first**, poller second |
-| Q8 | Catalogue size (row counts per aggregate)? | Backfill sizing | Assume ~500 k `Foo` records |
-| Q17 | Is there a pilot consumer who can read a stage 1 read-only API? (ADR-0007) | The value of stage 1, and therefore the staging order | **Assume yes**; if none exists, re-read ADR-0007 alternative (A) |
+| Q6 | PII: the peer is entitled to receive contact data and marks some of it required. **On what legal basis, and with what retention on their side?** | ADR-0005 §3, the erasure routine, stage 7's purge | **None is safe.** Record the basis before stage 1 ships |
+| Q7 | Does the peer push to us, do we poll them, or both? | Inbound design (stage 5) | **Build ingress first**, poller second |
+| Q8 | Catalogue size (row counts per aggregate)? | Backfill sizing (stage 6) | Assume ~500 k `Foo` records |
+| Q9 | `aggregateVersion` source: per-aggregate counter, or emission sequence? (defects D1, D2) | Stage 2 | **Per-aggregate counter** — the sequence is not implementable as ordered |
+| Q10 | How does the peer represent a deletion? Part of the schema they are writing now | Stage 3 tombstones (defect D11) | **A separate deletion message type**, validated by `changeKind` |
+| Q11 | Does the envelope need a propagation path, or is direct-source suppression enough now that only two systems are in scope? (defect D6) | Stage 5 | **Direct-source plus content-hash suppression** — no contract change needed |
+| Q14 | Does the consumer need `changeKind = Event` transition messages? | Stage 4 stream locking (finding S2) | **No** — defer stream locking entirely |
+| Q16 | Who owns `CONSUMER_CONTRACT.md` and signs it off? (defect D13) | Stage 2 onward | **Blocks stage 2** — a pull consumer cannot be correct without it |
+
+#### Answered
+
+Kept here so the numbering has no unexplained holes, and so an answer is not re-litigated.
+
+| # | Question | Answer | Folded into |
+|---|---|---|---|
+| Q5 | PostgreSQL major version in production | **17.** `xid8` and `pg_snapshot_xmin` are available; risk **R4 is closed** | ADR-0003 §5 |
+| Q12 | Do subscribers differ in PII grant or filter scope? | **No** — one consumer, and it is entitled. Defect **D7 does not bind**; the variant dimension stays in the design for a second consumer | ADR-0007 |
+| Q13 | Are reconciliation checksums subscriber-scoped? | **Moot at one subscriber** — its scope is the whole catalogue. Defect **D8 does not bind** | ADR-0007 |
+| Q15 | Which subscriber filters are needed in phase 1? | **None.** Defect **D12 does not bind** — records cannot leave a scope that does not exist | ADR-0007 |
+| Q17 | Is there a pilot consumer for stage 1? | **Yes, exactly one.** The exchange is one-to-one | ADR-0007 |
 
 Q3 is the true critical path: **nothing in the mapping layer can be finished without the
 peer's schema.** Everything else (outbox, dispatcher, feed, inbox plumbing) can proceed in
@@ -822,7 +837,7 @@ during a joint go-live call.
 | R1 | Peer schema not available / changes late | Blocks all mapping work | **High** | Q3 escalated now; build everything else against a stub contract; vendor + daily diff job |
 | R2 | Peer mandates delta payloads | +1 sprint, ordering machinery | Medium | ADR-0004 §3 specifies the delta variant; envelope already supports it |
 | R3 | Bulk SQL bypasses change capture | Silent data gaps | Medium | Analyzer ban + explicit attribute + nightly reconciliation |
-| R4 | PostgreSQL < 13 in production | `xid8` watermark unavailable | Low | **Verify in week 1**; fallback: lag the feed by a fixed safety window (weaker) |
+| ~~R4~~ | ~~PostgreSQL < 13 in production~~ | — | **Closed** | Production runs **PostgreSQL 17** (Q5). `xid8` and `pg_snapshot_xmin` are available; no fallback needed |
 | R5 | Feed cursor bug ships unnoticed | Silent consumer data loss | Medium | The watermark test in §10 is a release gate |
 | R6 | Auth mechanism undecided at implementation time | Ingress cannot ship | Medium | ADR-0005 fallback ladder; build behind an `IIntegrationAuthenticator` seam |
 | R7 | PII sent without legal basis | Compliance incident | Low | Redact by default; `pii_granted` opt-in; Q6 |
@@ -839,7 +854,8 @@ during a joint go-live call.
 1. **Approve the architecture** (ADR-0001 … 0006).
 2. **Approve the staging** (ADR-0007) — in particular that stage 1 is a read-only API and that
    the "no lost changes" guarantee therefore arrives at stage 3, not stage 2.
-3. **Answer Q1–Q8 and Q17** (§2.3) — Q3 (peer schema), Q2 (auth) and Q17 (pilot consumer) are
-   stage 1 prerequisites; Q5 (PostgreSQL version) is needed before stage 3.
+3. **Answer the twelve questions still open in §2.3.** Three are stage 1 prerequisites: the peer's
+   schema revision and freeze date (Q3), the auth mechanism (Q2), and the legal basis for the
+   personal data the peer is entitled to receive (Q6). Q5, Q12, Q13, Q15 and Q17 are answered.
 4. **Nominate the peer-team counterpart** who owns the contract and can resolve the gaps in
    MAPPING_MATRIX.md §7. Stage 1 cannot exit without them.

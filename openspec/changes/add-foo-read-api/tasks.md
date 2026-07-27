@@ -8,8 +8,7 @@ itself.
 
 - [ ] 0.1 Request the peer's OpenAPI schema (Q3) — the only blocker on this stage's exit
 - [ ] 0.2 Confirm the available auth mechanism (Q2) — the endpoints ship authenticated
-- [ ] 0.3 Name a pilot consumer who will read this (Q17); if there is none, re-read ADR-0007
-      alternative (A) before starting
+- [x] 0.3 Pilot consumer named (Q17): exactly one, one-to-one
 - [ ] 0.4 Confirm the .NET and EF Core versions in the solution, and the `Foo` row count
 
 ## 1. Projects and boundaries

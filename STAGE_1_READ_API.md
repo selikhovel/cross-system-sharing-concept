@@ -92,7 +92,7 @@ This is the bulk of the work. Produce a written inventory — it becomes `MAPPIN
 | 1.2.5 | Is there a soft-delete flag, and is there a **global query filter** for it? | `HasQueryFilter` in the configuration | If a filter exists, the projection already excludes deleted rows. If not, filter explicitly, or you publish deleted records |
 | 1.2.6 | Enum members of every enum reachable from `Foo` | Read the enums | Each needs a row in `MAPPING_MATRIX.md` §4 and an arm in a fail-closed switch |
 | 1.2.7 | Nullability truth versus declaration | `SELECT count(*) FROM foos WHERE <col> IS NULL` for anything the peer marks required | A field declared non-nullable in C# but null in 4 000 rows of production data fails at materialisation, not at compile time |
-| 1.2.8 | Which fields are personal data | The privacy/legal owner, not the code | Stage 1 redacts unconditionally (§4.6), and §1.5.3 is the trap |
+| 1.2.8 | Which fields are personal data, and what the recorded grant permits | The privacy/legal owner, not the code | Drives §4.6. Q6 is answered — the peer **is** entitled — but the legal basis and its retention are not, and §1.5.3 is why that matters |
 
 ### 1.3 The peer's contract
 
@@ -133,7 +133,12 @@ unconditionally (§2.3 Q6 default: "redact until confirmed"). If the peer's sche
 [D11](openspec/changes/add-cross-system-integration-layer/design.md). In that case Q6 stops being a
 default and becomes a stage 1 blocker: either the peer makes the field optional, or the PII grant is
 confirmed before stage 1 ships. In `MAPPING_MATRIX.md`'s worked example all three contact fields are
-optional, which is what makes unconditional redaction viable — confirm it against the real schema.
+optional. **In this integration they are not.** Q6 is answered in two parts: the peer *is* entitled
+to the data, **and** it marks some personal fields `required`. Blanket redaction is therefore off the
+table — it would produce payloads that fail the peer's own validation — and what governs instead is
+the recorded grant. §4.6 is written accordingly: the redactor is a no-op in stage 1 and exists so
+that stage 4's per-subscriber variant has something to generalise. Still missing, and needed before
+stage 1 ships: the legal basis and the peer's retention period.
 
 ---
 
@@ -726,11 +731,16 @@ public static class PiiFields
 }
 
 // Security/ContractRedactor.cs
-/// Stage 1 redacts unconditionally (ADR-0007 §Stage 1): there is no subscriber registry yet,
-/// so there is nothing to hold a grant. Stage 4 replaces this with the payload variant (D7).
+/// Q6 is answered: the peer IS entitled to the personal data, and marks some of it `required`.
+/// Stage 1 therefore emits it under a recorded grant and this redactor is a deliberate no-op —
+/// it exists so the seam is in place, and so stage 4 has something to generalise into the
+/// per-subscriber payload variant (defect D7, deferred at one consumer).
 internal sealed class ContractRedactor
 {
-    public ExternalFoo Redact(ExternalFoo p) => p with
+    // One grant, recorded in configuration alongside its legal basis and the peer's retention.
+    public ExternalFoo Apply(ExternalFoo p) => _grant.CoversPersonalData ? p : Strip(p);
+
+    private static ExternalFoo Strip(ExternalFoo p) => p with
     {
         Address = p.Address is null ? null : p.Address with { Street = null, PostalCode = null },
         Contact = null
@@ -738,8 +748,12 @@ internal sealed class ContractRedactor
 }
 ```
 
-> If §1.5.3 found any of these `required` in the peer's schema, stop and resolve Q6 — a redacted
-> payload that fails their validation is worse than no payload.
+> **Do not reach for blanket redaction here.** Because the peer marks some personal fields
+> `required`, stripping them produces payloads that fail its own validation — the same shape of
+> defect as D11. What makes this safe is the *grant*, not the *stripping*, and the grant is not
+> complete until the legal basis and the peer's retention period are written down. `PiiFields` stays
+> regardless: it drives the coverage assertion now, and stage 4's variant and stage 7's purge routine
+> later.
 
 ### 4.7 Security floor
 

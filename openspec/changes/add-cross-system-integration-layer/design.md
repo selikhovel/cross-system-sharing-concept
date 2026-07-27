@@ -31,6 +31,13 @@ themselves — which is the normal place for a design of this size to be wrong.
 
 ## 2. Defect register
 
+> **Status update — answers to Q12, Q13, Q15 and Q17 changed three of these.** The exchange is
+> one-to-one: exactly one consumer, entitled to the personal data, with no subscriber-scoped filters.
+> **D7**, **D8** and **D12** therefore do **not bind** and are deferred, and **D6** loses its
+> multi-hop argument though not its provenance requirement. See ADR-0007 §"One consumer, one-to-one".
+> The analysis below is left as written: it is why the deferral is a scoping decision rather than the
+> defects being wrong, and every one of them returns the day a second consumer appears.
+
 Severity: **Blocking** = the design cannot be implemented as written, or ships a silent-loss
 bug. **Major** = implementable but produces a known incident. **Minor** = internal
 inconsistency that will cost an implementer time.

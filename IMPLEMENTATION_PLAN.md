@@ -22,16 +22,17 @@ against a stub contract, but it cannot *exit* without the real one.
       backfill).
 - [ ] Confirm which auth mechanism is available (Q2) — stage 1 ships authenticated, so this is a
       stage 1 prerequisite, not a week-3 one.
-- [ ] Confirm whether the peer is authorised to receive contact PII (Q6). Default is redact, so this
-      does not block, but the answer changes the mapping matrix.
-- [ ] Identify a pilot consumer who will read stage 1 (Q17). Without one, re-read ADR-0007
-      alternative (A) before continuing.
-- [ ] `SELECT version();` on production — **must be 13+** for `xid8` / `pg_snapshot_xmin`
-      (Risk R4). Not needed until stage 3, but a wrong answer changes that stage's design, so
-      ask now.
+- [x] Peer entitled to receive contact personal data (Q6) — **and it marks some of that data
+      `required`**, so blanket redaction is not an option. Still open: the legal basis and the
+      peer's retention.
+- [x] Pilot consumer identified (Q17): exactly one, and the exchange is one-to-one.
+- [x] Production PostgreSQL version (Q5): **17**. `xid8` and `pg_snapshot_xmin` are available and
+      risk R4 is closed.
 - [ ] Confirm whether aggregates already raise domain events (if yes, ADR-0002's opt-in event path
       in stage 3 gets simpler).
-- [ ] Open tickets with owners for Q1–Q8 and Q9–Q17.
+- [ ] Open tickets with owners for the twelve questions still open in proposal §2.3, and **assign an
+      owner to each of the eight gaps in `MAPPING_MATRIX.md` §7** — all eight are currently ownerless,
+      and a gap without a name against it does not move.
 
 ---
 
@@ -62,8 +63,7 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
    - [ ] `FooSnapshot` — flat, serialisation-friendly, no domain types.
    - [ ] Projection query: `AsNoTracking()`, `.Select(...)` straight into the snapshot.
          **No aggregate rehydration, no `Include` chains, no lazy loading.**
-   - [ ] Single-id and keyset-range overloads (`WHERE (created_at, id) > (@c, @i)`), because both
-         endpoints and every later stage need exactly these two shapes.
+   - [ ] Single-id and keyset-range overloads. **Page by the primary key**, not `(created_at, id)`: the composite key would need an index, and stage 1's whole claim is that it needs no migration (guide В§4.3).
 
 3. **Mapper (the ACL)**
    - [ ] `FooContractMapper` with Mapperly and
@@ -77,7 +77,8 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
 
 - [ ] `GET /integration/v1/foos/{id}` → the envelope of ADR-0006 §2 with one item, or `404`.
 - [ ] `GET /integration/v1/foos?cursor=&limit=` → `{ items, nextCursor, hasMore }`.
-- [ ] **Keyset pagination only** — never `OFFSET`. Opaque cursor over `(created_at, id)`.
+- [ ] **Keyset pagination only** — never `OFFSET`. Opaque cursor over the **primary key**;
+      `(created_at, id)` needs an index and is stage 3's business (guide §4.3).
 - [ ] `limit` capped (default 100, maximum 500); the cap is documented, not silent.
 - [ ] Serialisation: one shared source-generated `JsonSerializerContext`, naming policy matching
       the peer's schema, `DefaultIgnoreCondition = Never`, `NumberHandling = Strict`.
@@ -94,8 +95,7 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
 - [ ] TLS-only; no certificate-validation callbacks anywhere.
 - [ ] Serilog redaction policy for `Authorization`, `X-Signature`, `X-Api-Key`, `*token*`,
       `*secret*` — with a test asserting a token never reaches the output.
-- [ ] **PII redacted unconditionally**: every field marked `pii` in `MAPPING_MATRIX.md` is omitted.
-      No subscriber table exists yet, so there is nothing to grant against.
+- [ ] **Personal data under a recorded grant** (Q6): the peer is entitled and marks some personal fields `required`, so blanket redaction would produce payloads failing its validation. Emit them, and record the legal basis and retention before shipping.
 
 ### Day 4 — the tests that make it a contract, not an endpoint
 
@@ -111,7 +111,7 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
       silent fallback.
 - [ ] Schema validation: generated payloads validate against the vendored peer schema (once it
       exists).
-- [ ] PII test: no field marked `pii` appears in any response.
+- [ ] PII test: fields marked `pii` appear **only** where the recorded grant permits.
 - [ ] Testcontainers: keyset pagination over 10 000 rows returns every row exactly once, with no
       duplicate and no gap, including while rows are inserted mid-walk.
 - [ ] Architecture tests green.
@@ -229,7 +229,7 @@ poller can be served.
       hash, emitted variant, in-scope flag — which scope-exit tombstones and hash suppression both
       need (**D12**).
 - [ ] `payload_variant` on `outbox_message`, part of the fan-out key alongside `contract_version`;
-      per-subscriber PII grants replace stage 1's unconditional redaction (**D7**).
+      per-subscriber PII grants generalise stage 1's single recorded grant (**D7**, deferred at one consumer).
 - [ ] Fan-out on aggregate type, filter match, contract version and variant.
 - [ ] Compaction with the corrected predicate — `message_sequence`, not `sequence` — that can see
       `compactable` and never supersedes an `Event` delivery (**D4**).

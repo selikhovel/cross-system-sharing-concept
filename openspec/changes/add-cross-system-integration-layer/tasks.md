@@ -35,8 +35,10 @@ the service's repository, ordered as `IMPLEMENTATION_PLAN.md` orders it, with th
       decide `filter_expression`'s fate — specified grammar, or named code-defined filters (**D12**)
 - [ ] 0.12 Write `CONSUMER_CONTRACT.md`, add its README row, and move every consumer obligation out of
       the ADRs into it (**D13**)
-- [ ] 0.13 Add open questions Q9–Q16 to `TECHNICAL_PROPOSAL.md` §2.3 and the field-level gaps to
-      `MAPPING_MATRIX.md` §7, each with an owner and a default
+- [x] 0.13 Add open questions Q9–Q16 to `TECHNICAL_PROPOSAL.md` §2.3 and the field-level gaps to
+      `MAPPING_MATRIX.md` §7, each with an owner and a default — **§2.3 done**; Q12, Q13, Q15 landed
+      already answered (one consumer) and went straight to the Answered table. `MAPPING_MATRIX.md` §7
+      still has no owners assigned, which is the remaining half
 - [ ] 0.14 Correct `TECHNICAL_PROPOSAL.md` §6.1's identity resolution to use the authentication seam
       (**S1**); fix the delivered-version guard's index (**S5**); state the push-versus-pull stream
       difference (**S4**); price or defer `Event` stream locking (**S2**); split the two replay

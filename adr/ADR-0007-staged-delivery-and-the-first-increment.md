@@ -5,9 +5,9 @@
 - **Related:** ADR-0001 (integration style), ADR-0002 (capture), ADR-0003 (storage and delivery),
   ADR-0004 (contract and mapping), ADR-0006 (backfill) · revises the phasing in
   TECHNICAL_PROPOSAL §12
-- **Open question:** Q17 — does a pilot consumer exist who can integrate against a read-only API
-  in stage 1? If nobody consumes stage 1, its value is only the contract validation, and the
-  order below is worth re-examining.
+- **Q17, answered:** there is exactly **one** consumer, and the exchange is **one-to-one**. Stage 1
+  therefore has a real reader, and the ordering below stands. See "One consumer" below for what that
+  removes from stages 4 and 6.
 
 ## Context
 
@@ -55,7 +55,7 @@ the peer's contract shape, built on demand from current domain state, keyset-pag
 | The page envelope of ADR-0006 §2 (`items`, `nextCursor`, `hasMore`) | No push, no change notification, no deletes |
 | Keyset pagination, capped page size | No inbound |
 | Authentication, one scope, per-caller rate limit, page cap | No subscriber table |
-| **PII redacted unconditionally** (§2.3 Q6 default) | No per-subscriber PII grant |
+| **Personal data emitted under a recorded grant** (Q6: the peer is entitled, and marks some of it `required`) | No per-subscriber grant table |
 | Architecture tests, field-coverage test, round-trip tests, schema validation | No outbox retention, no partitioning |
 
 Two consequences of that table are the point of the stage:
@@ -88,6 +88,29 @@ appears only where an explicit grant permits it.
 | **6** — Backfill runs and reconciliation | Pinned-watermark runs over stage 1's endpoint, `backfill_run`, push-mode backfill at the lowest priority with a token bucket, subscriber-scoped checksums, the version-pinned canonical serialiser, the nightly job | Divergence becomes observable daily instead of by a business user | Checksums converge; divergence zero for a week |
 | **7** — Hardening and scale | Retention and partitioning per table, the bulk-mutation analyzer, failure injection, load tests, read-replica routing, worker split, runbook, game day | Nothing new; the thing stops needing heroics | On-call trained; alerts verified in a game day |
 
+### One consumer, one-to-one — what that removes
+
+Q17 answered "exactly one consumer" and Q12/Q13/Q15 followed from it: that consumer is entitled to
+the personal data, and there are no subscriber-scoped filters. Three defects therefore **do not bind**
+at N=1:
+
+| Defect | Why it binds at N>1 | At N=1 |
+|---|---|---|
+| **D7** payload variants | Subscribers differing in PII grant need separate payloads and hashes | One subscriber, entitled. **One payload.** Keep the variant *dimension* in the schema — retrofitting it later means rewriting the fan-out key and every hash comparison |
+| **D8** subscriber-scoped checksums | A filtered subscriber mismatches on every bucket, every night | Its scope is the whole catalogue, so subscriber scope and global scope are the same thing |
+| **D12** scope-exit tombstones | Needs durable per-`(subscriber, aggregate)` state to detect a record leaving scope | No filters, so nothing can leave a scope. **But a reduced form of that state is still wanted**: last emitted payload hash per *aggregate*, which is what D6's no-op suppression reads |
+
+**D6 shrinks but does not vanish.** Its multi-hop argument — that suppressing only the immediate
+sender cannot break an A→B→C→A cycle — is inapplicable with two systems. Direct-source suppression is
+sufficient, and content-hash suppression stays because it is nearly free and also stops the
+two-system ping-pong. The provenance column is still required: you cannot suppress an echo without
+knowing the change arrived from the peer.
+
+Effect on sizing: **stage 4 loses the variant and projection-state work; stage 6 loses subscriber
+scoping.** Both drop roughly one size class. What must not be dropped is the *shape*: the subscriber
+table stays, holding one row. Onboarding a second consumer should be a row and an identity, not a
+redesign — and the whole point of stages 4 and 6 is that the second consumer is cheap.
+
 ### Security is a floor, not a stage
 
 Every stage that exposes an endpoint ships authenticated, scope-authorised and rate-limited from
@@ -112,9 +135,9 @@ Each stage is gated on the defects that bind at that stage
 | 1 | none — stage 1 is defined to avoid all fourteen |
 | 2 | **D1** (version source), **D6** (provenance columns) |
 | 3 | **D2** (version on snapshot pages), **D5** (watermark scope), **D9** (stage-1 retry), **D11** (deletion schema), **D14** (batch isolation) |
-| 4 | **D3** (priority claim), **D4** (compaction predicate), **D7** (payload variants), **D12** (projection state), **S5** (delivered-version index) |
-| 5 | **D6** (loop suppression, in full), **S1** (identity resolution) |
-| 6 | **D8** (subscriber-scoped checksums) |
+| 4 | **D3** (priority claim), **D4** (compaction predicate), **S5** (delivered-version index). ~~D7~~, ~~D12~~ deferred at one consumer — but keep the payload-variant dimension and a per-aggregate last-hash row |
+| 5 | **D6** (loop suppression — direct source plus content hash; the multi-hop case is out of scope at two systems), **S1** (identity resolution) |
+| 6 | ~~**D8**~~ deferred — with one subscriber, its scope is the whole catalogue |
 | 7 | **D10** (retention versus schema) |
 
 `D13` (the consumer contract) is resolved in stage 1 and maintained thereafter.
@@ -203,7 +226,9 @@ contact last" problem as (A), with more machinery.
   that actually materialise.
 - **Two consumer-visible contract iterations** (stage 1 without `aggregateVersion`, stage 2 with).
   Additive and no version bump, but it is still a second conversation with the other team.
-- **Stage 1 without a pilot consumer is worth much less** than stated above — hence Q17. If no peer
+- ~~**Stage 1 without a pilot consumer is worth much less**~~ — **no longer a cost**: Q17 is answered,
+  there is exactly one consumer, and it reads stage 1. Retained as reasoning for anyone reusing this
+  ADR elsewhere. Original wording: stage 1 without a pilot consumer is worth much less. If no peer
   can read it, alternative (A) becomes competitive again.
 
 ## Compliance / verification
@@ -213,5 +238,5 @@ contact last" problem as (A), with more machinery.
   point, which is when it is cheapest to add.
 - Stage 1 ships with the field-coverage test of ADR-0004 §5(b). "Every field mapped or excluded
   with a reason" is enforced from the first increment, not retrofitted.
-- A test asserts no field marked `pii` in `MAPPING_MATRIX.md` appears in any stage 1 response.
+- A test asserts every field marked `pii` in `MAPPING_MATRIX.md` appears **only** where the recorded grant permits it. Blanket redaction is wrong here: the peer is entitled and marks some personal fields `required`, so omitting them produces payloads that fail its own validation.
 - Each stage's exit criterion above is a release gate, not a status report.

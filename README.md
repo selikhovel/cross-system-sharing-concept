@@ -75,9 +75,13 @@ arrives, only the dispatcher's transport changes.
 
 ## Status
 
-**Proposed.** Nine open questions are listed in TECHNICAL_PROPOSAL.md §2.3. Three are stage 1
-prerequisites: the peer's OpenAPI schema (Q3), the available auth mechanism (Q2) and a pilot
-consumer (Q17). The production PostgreSQL version (Q5) is needed before stage 3, not before stage 1.
+**Proposed.** Twelve open questions are listed in TECHNICAL_PROPOSAL.md §2.3, with five more answered
+and folded into the ADRs. **Three touch stage 1:** which revision of the peer's schema and when it
+freezes (Q3), the auth mechanism (Q2), and the legal basis for the personal data the peer is entitled
+to receive (Q6).
+
+The exchange is **one-to-one** — exactly one consumer (Q17) — which defers three of the fourteen
+defects, and production runs **PostgreSQL 17** (Q5), which closes risk R4.
 
 Fourteen defects found while deriving the OpenSpec requirements are open in
 [design.md](openspec/changes/add-cross-system-integration-layer/design.md); ADR-0007 records which

@@ -190,6 +190,12 @@ Anything below it has committed or aborted — so no row below the watermark can
 This costs a small, bounded feed lag (the duration of the longest concurrent write
 transaction) in exchange for a feed that cannot skip rows. Requires PostgreSQL 13+.
 
+> **Confirmed: production runs PostgreSQL 17** (Q5, answered). The prerequisite is met, risk R4 is
+> closed, and the weaker fallback — lagging the feed by a fixed safety window — is not needed and
+> should not be built. Two secondary consequences: `DETACH PARTITION CONCURRENTLY` (14+) makes §8's
+> partition rotation materially less disruptive than a 13-era plan assumes, and nothing in this ADR
+> needs a version guard.
+
 The same watermark is applied to the dispatcher's materialisation scan for the same reason.
 
 ### 6. Retry, backoff and dead-letter
@@ -289,7 +295,9 @@ and unpredictable autovacuum behaviour exactly when the queue is busiest.
 
 ### Negative / costs accepted
 
-- **Requires PostgreSQL 13+** for `xid8` / `pg_snapshot_xmin`. (Verify the production version
+- ~~**Requires PostgreSQL 13+**~~ — **satisfied**: production is on 17 (§5). Retained as a
+  constraint for anyone porting this design elsewhere. Original wording: requires PostgreSQL 13+ for
+  `xid8` / `pg_snapshot_xmin`. (Verify the production version
   before implementation — this is a hard prerequisite.)
 - **Feed lag equals the longest concurrent write transaction.** Long-running write
   transactions in the domain now have a visible integration cost; worth a `statement_timeout`

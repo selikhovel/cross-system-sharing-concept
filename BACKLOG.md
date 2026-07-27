@@ -108,12 +108,12 @@ are resolved.
 
 | Epic | Stage | Outcome for someone outside the team | Release gate | Size | Defect gates | Blocked by |
 |---|---|---|---|---|---|---|
-| **E1** | 1 | A peer reads our `Foo` catalogue in **their** contract shape | Pilot consumer reconstructs the full catalogue; mapping matrix complete with no unresolved gaps | **M** — 5 eng. days, 66 pts | none | Q2, Q3, Q17 |
+| **E1** | 1 | A peer reads our `Foo` catalogue in **their** contract shape | The consumer reconstructs the full catalogue; mapping matrix complete against a named schema revision; personal data present only under a recorded grant | **M** — 5 eng. days, 66 pts | none | Q2, Q3, Q6 |
 | **E2** | 2 | `aggregateVersion` appears, so a consumer can ignore stale updates | Rollback leaves no capture row; no measurable write-latency change | **M** | D1, D6 | Q9 |
-| **E3** | 3 | Consumers stop re-reading the catalogue; **deletions become visible** | The watermark test green as a gate; pilot syncs a week with no gap | **L** | D2, D5, D9, D11, D14 | Q5, Q10 |
-| **E4** | 4 | Latency drops from a poll interval to seconds | p95 delivery < 10 s; zero dead letters; a 500 k backfill does not delay one live change | **L** | D3, D4, D7, D12, S5 | Q1, Q12 |
-| **E5** | 5 | Peer data lands in our domain through existing command handlers | Peer messages applied; echo suppression verified across a three-system loop | **L** | D6 (full), S1 | Q7, Q11 |
-| **E6** | 6 | Divergence becomes observable daily instead of by a business user | Checksums converge; divergence zero for a week | **M** | D8 | Q8, Q13 |
+| **E3** | 3 | Consumers stop re-reading the catalogue; **deletions become visible** | The watermark test green as a gate; pilot syncs a week with no gap | **L** | D2, D5, D9, D11, D14 | Q10 |
+| **E4** | 4 | Latency drops from a poll interval to seconds | p95 delivery < 10 s; zero dead letters; a 500 k backfill does not delay one live change | **M** | D3, D4, S5 | Q1 |
+| **E5** | 5 | Peer data lands in our domain through existing command handlers | Peer messages applied; echo suppression verified against the peer | **L** | D6, S1 | Q7, Q11 |
+| **E6** | 6 | Divergence becomes observable daily instead of by a business user | Checksums converge; divergence zero for a week | **S** | — | Q8 |
 | **E7** | 7 | It stops needing heroics | On-call trained; alerts verified in a game day | **M** | D10 | — |
 
 `D*`/`S*` are the defects in
@@ -182,7 +182,7 @@ epic**, and four of its findings change the code that gets written.
 | **T1.0-e** | Verify the keyset comparison translates to SQL — run it and **read the generated SQL** | §1.4.1, §7.3 | 1 | — |
 | **T1.0-f** | Verify column types: `numeric` versus `double`, `timestamptz` versus `timestamp`, `date` for date-only | §1.4.4–1.4.6, §1.5.2 | 1 | — |
 | **T1.0-g** | Confirm which personal-data fields the peer marks `required` — if any, Q6 becomes a blocker | §1.5.3 | 1 | — |
-| **T1.0-h** | Request the peer schema (Q3); confirm the auth mechanism (Q2); name a pilot consumer (Q17) | §1.3 | 1 | — |
+| **T1.0-h** | Request the peer schema revision and its freeze date (Q3); confirm the auth mechanism (Q2); get the legal basis for the peer's personal-data entitlement (Q6) | §1.3 | 1 | — |
 
 **Feature done when** every row of guide §1 has a written answer and T1.0-e's SQL has been read by a
 human.
@@ -376,19 +376,26 @@ schema".
 
 *Personal data does not leave without a legal basis.*
 
-**OpenSpec:** `foo-read-api` — "Personal data is not served in stage 1".
+**OpenSpec:** `foo-read-api` — "Personal data is served only under a recorded grant".
 
-#### US1.3.1 — Personal data stays in
+#### US1.3.1 — Personal data leaves only under a recorded grant
 
-> **As** the data protection officer, **I want** no personal data in any stage 1 response, **so
-> that** we are not transferring it before the legal basis is confirmed.
+> **As** the data protection officer, **I want** every personal field that leaves the service to be
+> covered by a written grant naming the legal basis and the recipient's retention, **so that** the
+> transfer is defensible rather than merely permitted by whoever configured it.
 
 **Acceptance criteria**
-- No field marked `pii` in `MAPPING_MATRIX.md` resolves in any response *(scenario: Foo with contact details)*
+- A field marked `pii` appears **only** where the recorded grant covers it *(scenario: Grant covers the personal data)*
+- With no grant recorded, every `pii` field is omitted — a refusal, not a default *(scenario: No grant recorded)*
+- The grant records **who authorised it, the legal basis, and the permitted retention**, not just "allowed"
 - The personal-data registry and the mapping matrix agree, asserted by test
-- Adding a new personal field fails the redaction test until it is omitted *(scenario: New personal field added)*
-- If the peer marks a personal field `required`, this story **blocks the epic** until Q6 is resolved —
-  a redacted payload that fails their validation is worse than no payload
+- Adding a new personal field fails the coverage test until it carries a grant decision *(scenario: New personal field added)*
+
+> **Q6 is answered in two parts and both matter.** The peer *is* entitled, **and** it marks some
+> personal fields `required` — so blanket redaction would produce payloads that fail its own
+> validation. The story is therefore about the grant, not about stripping. **Still blocking:** the
+> legal basis and the peer's retention are not yet written down, and this story cannot be accepted
+> without them.
 
 **Pts:** 3 · **Depends:** T1.0-g, US1.2.1
 
@@ -600,7 +607,7 @@ because that is when its defect gates are resolved and its unknowns are known.
 | US1.2.1 | Values are translated without silent loss · Payloads validate against the vendored peer schema |
 | US1.2.2 | Values are translated without silent loss |
 | US1.2.3 | The mapping is total, and its totality is enforced by the build |
-| US1.3.1 | Personal data is not served in stage 1 |
+| US1.3.1 | Personal data is served only under a recorded grant |
 | US1.4.1 | The endpoints ship authenticated, authorised and bounded |
 | US1.4.2 | The endpoints are reversible without a deploy |
 | US1.5.1 | The domain stays unaware of the integration |
@@ -613,27 +620,38 @@ shared, which is why EN1.1.2 exists as an enabler rather than being folded into 
 
 ## 6. Open questions as blockers
 
+Authoritative list: [TECHNICAL_PROPOSAL.md §2.3](TECHNICAL_PROPOSAL.md). This table maps it onto
+backlog items.
+
 | Q | Question | Blocks | Default if unanswered |
 |---|---|---|---|
-| **Q2** | Which auth mechanism is available? | **US1.4.1** | OAuth 2.0 client credentials, HMAC fallback |
-| **Q3** | Where is the peer's schema? | **EN1.2.1**, US1.5.2, and E1's exit | Build against a stub; the epic cannot exit |
-| **Q6** | Is the peer authorised to receive contact personal data? | **US1.3.1** | Redact until confirmed — unless the peer marks it `required`, then it blocks |
-| **Q17** | Is there a pilot consumer for stage 1? | E1's value, US1.5.2 | Assume yes; if not, re-read ADR-0007 alternative (A) |
-| **Q9** | `aggregateVersion` source? | E2 | Per-aggregate counter (defect **D1**) |
-| **Q10** | How does the peer represent a deletion? | **US3.3.1** | Separate message type (defect **D11**) |
-| **Q11** | Loop-prevention mechanism? | **US5.3.1** | Content-hash suppression on our side |
-| **Q12** | Do subscribers differ in grant or filter scope in phase 1? | **US4.5.1** | Assume yes; model the variant from the start |
-| **Q13** | Are checksums subscriber-scoped? | **US6.2.1** | Yes (defect **D8**) |
+| **Q2** | Which auth mechanism? Workload identity, an IdP, or a gateway — see ADR-0005 §1 | **US1.4.1** | OAuth 2.0 client credentials, HMAC fallback |
+| **Q3** | Which revision of the peer's schema, and when is it frozen? Their project is still in development | **EN1.2.1**, US1.5.2, and E1's exit | Build against a stub; the epic cannot exit until a revision is named |
+| **Q6** | The peer is entitled and marks some personal fields `required`. On what legal basis, with what retention on their side? | **US1.3.1**, which now asserts *presence under a recorded grant* rather than absence | **No safe default.** Record the basis before E1 ships |
 | **Q1** | Snapshot or delta payloads? | E4 ordering machinery | Snapshots |
-| **Q5** | PostgreSQL major version? | **US3.2.1** | Verify before E3; 13+ is a hard prerequisite |
+| **Q4** | Embed `Bar`/`Baz`, or references only? | E3 fan-out | References only |
 | **Q7** | Does the peer push, do we poll, or both? | E5 shape | Ingress first, poller second |
 | **Q8** | Catalogue size? | E6 sizing | ~500 k `Foo` records |
-| **Q14** | Are transition events needed in phase 1? | E4 stream locking (**S2**) | No — defer entirely |
-| **Q15** | Which subscriber filters are needed? | **US4.5.1**, **D12** | Named code-defined filters, not an expression language |
-| **Q16** | Who owns the consumer contract? | **US1.5.2** | Blocks stage 2 onward |
+| **Q9** | `aggregateVersion` source: per-aggregate counter or emission sequence? | E2 | Per-aggregate counter (defects **D1**, **D2**) |
+| **Q10** | How does the peer represent a deletion? | **US3.3.1** | A separate deletion message type (defect **D11**) |
+| **Q11** | Propagation path in the envelope, or is direct-source suppression enough at two systems? | **US5.3.1** | Direct source plus content hash (defect **D6**) |
+| **Q14** | Does the consumer need transition messages? | E4 stream locking (finding **S2**) | No — defer entirely |
+| **Q16** | Who owns `CONSUMER_CONTRACT.md` and signs it off? | E2 onward | Blocks E2 (defect **D13**) |
 
-**Q2, Q3, Q6 and Q17 are the only ones that touch Epic 1.** Everything else can be answered while
-E1 is being built.
+**Only Q2, Q3 and Q6 touch Epic 1.** Everything else can be answered while E1 is being built.
+
+### 6.1 Answered, and what they removed
+
+| Q | Answer | Backlog effect |
+|---|---|---|
+| **Q5** | PostgreSQL **17** | Risk R4 closed; E3 has no version prerequisite left |
+| **Q12** | One consumer, entitled to the personal data | **D7 deferred.** US4.5.1 shrinks to "one payload, one grant" — but the variant dimension stays in the schema |
+| **Q13** | Checksum scope is moot at one subscriber | **D8 deferred.** E6 drops from **M** to **S** |
+| **Q15** | No subscriber filters in phase 1 | **D12 deferred.** US4.5.1 loses the projection-state work; a per-aggregate last-hash row is still wanted for D6 |
+| **Q17** | Exactly one consumer, one-to-one | E1 has a real reader. US5.3.1's acceptance drops the three-system loop and asserts against the peer directly |
+
+Deferred is not resolved: each returns the day a second consumer appears, which is why the
+subscriber table still ships in E4 holding one row.
 
 ---
 

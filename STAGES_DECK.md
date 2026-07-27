@@ -42,7 +42,7 @@ flowchart LR
     proj -->|"AsNoTracking, keyset on PK"| db[("core.foos")]
     proj --> snap["FooSnapshot"]
     snap --> acl["ACL mapper<br/>enums · money · units · guards"]
-    acl --> red["Redact personal data"]
+    acl --> red["Apply the personal-data grant"]
     red -->|"JSON page"| peer
 
     classDef new fill:#15242E,stroke:#15242E,color:#F7FAFB
@@ -56,9 +56,9 @@ flowchart LR
 | **New for a consumer** | Build a local copy by walking pages. Read one record for repair. Answer the eight open mapping gaps against **real payloads** rather than in the abstract. |
 | **What it costs** | **No incremental sync** — replace-all only. **No deletion signal** — a removed record simply stops appearing. Read load on the primary, unbuffered. A working poller can become the integration nobody upgrades. |
 | **Mechanism** | No new table, no migration, no worker, no change to the write path. Compile-time mapper whose unmapped-member diagnostics are build errors. Keyset pages over the primary key, so no index is needed. |
-| **Release gate** | A pilot consumer reconstructs the full catalogue; the mapping matrix is complete with zero unresolved gaps. |
+| **Release gate** | The consumer reconstructs the full catalogue; the mapping matrix is complete with zero unresolved gaps **against a named vendored revision** of the peer's schema; personal data appears only where an explicit grant permits it. |
 | **Gates to clear first** | None — the stage is scoped to avoid all fourteen review defects. |
-| **Waiting on others** | Peer schema (Q3), auth mechanism (Q2), a pilot consumer (Q17). |
+| **Waiting on others** | Which revision of the peer's schema and when it freezes (Q3); the auth mechanism (Q2). The consumer is confirmed: exactly one, one-to-one (Q17). |
 
 ---
 
@@ -129,7 +129,7 @@ flowchart LR
 | **Mechanism** | Materialise off the request path, validate before the row is written, commit **per aggregate** so one bad record cannot stall its batch. The feed exposes only rows whose inserting transaction is guaranteed complete. |
 | **Release gate** | The watermark test is a release gate: a slow transaction holding sequence *N* and a committed *N+1* must return **neither**, then **both**. |
 | **Gates to clear first** | `D2` page versions · `D5` watermark scope · `D9` stage-1 retry · `D11` deletion schema · `D14` batch isolation |
-| **Waiting on others** | PostgreSQL 13+ confirmed (Q5), the peer's deletion representation (Q10). |
+| **Waiting on others** | The peer's deletion representation (Q10). PostgreSQL is confirmed at **17** (Q5), so risk R4 is closed. |
 
 > **Why the watermark is the single most important line of SQL here.** `sequence` is assigned at
 > insert time but rows become visible at commit time. A transaction taking sequence 100 and
@@ -165,7 +165,7 @@ flowchart LR
 | **What it costs** | **At-least-once, never exactly-once.** Consumers must be idempotent; that is contractual, not advisory. Real operational surface arrives: dead letters, breakers, replay, alerts, a runbook to own. Personal data becomes a per-subscriber decision. |
 | **Mechanism** | Claiming ordered by priority, so a multi-day backfill can never delay a live change. Compaction supersedes undelivered older messages for the same aggregate, which makes out-of-order delivery harmless by construction. Permanent failures are quarantined on the first attempt rather than retried into a poison loop. |
 | **Release gate** | p95 delivery under 10 s; dead letters at zero; **500 000 backfill rows do not delay one live row**. |
-| **Gates to clear first** | `D3` priority claim · `D4` compaction predicate · `D7` payload variants · `D12` projection state · `S5` delivered-version index |
+| **Gates to clear first** | `D3` priority claim · `D4` compaction predicate · `S5` delivered-version index. `D7` and `D12` are **deferred at one consumer** — keep the payload-variant dimension and a per-aggregate last-hash row anyway |
 | **Waiting on others** | Payload shape (Q1), subscriber entitlements (Q12). |
 
 ---
@@ -198,10 +198,10 @@ flowchart LR
 | | |
 |---|---|
 | **New for a consumer** | Push data to us and get `202` for both a new message and a retry. Have a message rejected by our domain rules explicitly rather than half-applied. Keep your own identifiers correlated alongside ours, never substituted for our key. |
-| **What it costs** | **Replication loops become possible** and must be actively suppressed — suppressing only the immediate sender does not break a three-system cycle, because every hop is a local write that raises the version. Domain rejections need a policy. A correlation table to maintain, with conflicting bindings to adjudicate. |
+| **What it costs** | **Replication loops become possible** and must be actively suppressed. At two systems, suppressing the immediate sender is sufficient — the multi-hop cycle that defeats it needs a third participant, and there is none. Domain rejections need a policy. A correlation table to maintain, with conflicting bindings to adjudicate. |
 | **Mechanism** | The ingress endpoint does authentication, structural validation and one deduplicated insert — nothing else. Domain mutation happens later, in a worker, through the **existing application command handlers**. A mapping bug on our side returns `202` and a retryable row, never a `500` the peer reads as delivery failure. |
-| **Release gate** | Peer messages applied through the domain; echo suppression verified across a **three-system** loop, not just a direct echo. |
-| **Gates to clear first** | `D6` loop suppression, in full · `S1` identity resolution |
+| **Release gate** | Peer messages applied through the domain; echo suppression verified against the peer — a change absorbed from it does not bounce back. |
+| **Gates to clear first** | `D6` loop suppression — direct source plus content hash; the multi-hop case is out of scope at two systems · `S1` identity resolution |
 | **Waiting on others** | Push or poll (Q7), loop-prevention mechanism (Q11). |
 
 ---
@@ -234,7 +234,7 @@ flowchart LR
 | **What it costs** | Snapshot pages are computed on demand, so a large run loads the primary unless served from a replica. **Double delivery during the handover window** — harmless under the version rule, but it must be stated or someone files it as a bug. The canonical JSON form becomes a contract: changing it invalidates every stored hash. Reconciliation only pays off if the consumer implements the comparison. |
 | **Mechanism** | Snapshot-then-stream: pin a safe watermark, serve keyset pages, resume the feed there. Records changed mid-run arrive twice and converge — **this is the second time the state-transfer decision pays for itself**, and why no freeze window is needed. Checksums are scoped to the authenticated subscriber, or a filtered consumer mismatches on every bucket every night. |
 | **Release gate** | Checksums converge; divergence stays at zero for a week. |
-| **Gates to clear first** | `D8` subscriber-scoped checksums |
+| **Gates to clear first** | None. `D8` is deferred: with one subscriber, its scope is the whole catalogue |
 | **Waiting on others** | Catalogue size (Q8), checksum scope (Q13). |
 
 ---
@@ -365,7 +365,7 @@ in slice 5, so the pipe is end to end before the peer's schema exists.
 |---|---|---|
 | **1** | The projection asserted **in memory** | Projects, the dependency-direction test while it is trivially green, the flat snapshot, one canonical projection expression. No database, no mapper, no endpoint. |
 | **2** | **A peer-shaped page over HTTP** — the demo | Store, keyset paging, cursor, a hand-written stub contract, both endpoints. The same assertions re-run through PostgreSQL: the pair that catches the EF translation traps. |
-| **3** | Authenticated, bounded, reversible | The authenticator seam, one scope, per-caller rate limit, log redaction, unconditional redaction of personal data, and a flag that turns it all off. |
+| **3** | Authenticated, bounded, reversible | The authenticator seam, one scope, per-caller rate limit, log redaction, personal data emitted under the recorded grant, and a flag that turns it all off. |
 | **4** | The anti-corruption layer, proven total | Fail-closed enum tables, value converters, length guards that raise rather than truncate, and the reflection test that names any domain field you forgot. |
 | **5** | Contract handover — ⛔ blocked externally | Vendor the peer's schema, generate the types, delete the stub, complete the mapping matrix, write the consumer contract. This is the exit criterion. |
 
@@ -381,9 +381,9 @@ Slices 1–4 are unblocked and can start today. Slice 5 waits on another team, w
 | **1** Read API | A peer reads the catalogue in their contract shape | A local copy, built by walking pages | No incremental sync, no deletion signal | — |
 | **2** Capture | No change can commit without its integration record | A version to compare against | Still nothing delivered | `D1` `D6` |
 | **3** Feed | Incremental sync without gaps | Only what changed, plus tombstones | Feed lag equals the longest write transaction | `D2` `D5` `D9` `D11` `D14` |
-| **4** Push | Seconds instead of a poll interval | A push, with no poller to operate | At-least-once; real operational surface | `D3` `D4` `D7` `D12` `S5` |
+| **4** Push | Seconds instead of a poll interval | A push, with no poller to operate | At-least-once; real operational surface | `D3` `D4` `S5` |
 | **5** Inbound | Peer data enters through the domain's front door | Send us data and get `202` | Replication loops become possible | `D6` `S1` |
-| **6** Backfill | Bootstrap with no downtime; divergence found nightly | Full load with no maintenance window | Double delivery during handover | `D8` |
+| **6** Backfill | Bootstrap with no downtime; divergence found nightly | Full load with no maintenance window | Double delivery during handover | — |
 | **7** Hardening | Survivable by someone who did not build it | Nothing — that is the point | Nothing demonstrable, so it gets cut | `D10` |
 
 A gate is a **hard entry condition**, not a risk note: stage 4 cannot start before `D3` is resolved,

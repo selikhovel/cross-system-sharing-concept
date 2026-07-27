@@ -189,20 +189,36 @@ Authentication SHALL sit behind a seam so the mechanism can change without touch
 - **THEN** the log records caller, route, page size, cursor, status and duration
 - **AND** contains neither credentials nor payload content
 
-### Requirement: Personal data is not served in stage 1
+### Requirement: Personal data is served only under a recorded grant
 
-The system SHALL omit every field marked as personal data in the mapping matrix from every stage 1
-response, unconditionally, because no subscriber registry exists yet to hold a grant.
+The system SHALL emit a field marked as personal data in the mapping matrix **only** where a recorded
+grant permits it, and SHALL treat the absence of a recorded grant as a refusal to emit.
 
-#### Scenario: Foo with contact details
+The grant SHALL record who authorised the transfer, on what legal basis, and what retention the
+recipient is permitted — not merely that the transfer is allowed.
 
-- **WHEN** a property whose contact has a name, phone and email is returned
-- **THEN** none of those fields appear in the response
+> Q6 is answered in two parts: the peer **is** entitled to this data, **and** it marks some personal
+> fields `required`. Blanket redaction is therefore not a safe default here — omitting a required
+> field produces a payload that fails the peer's own validation, which is defect **D11** in a
+> different costume. What makes the transfer safe is the recorded grant, not the stripping.
+
+#### Scenario: Grant covers the personal data
+
+- **WHEN** a `Foo` whose contact has a name, phone and email is returned
+- **AND** the recorded grant covers personal data
+- **THEN** those fields appear in the response
+- **AND** the grant's legal basis and permitted retention are recorded and discoverable
+
+#### Scenario: No grant recorded
+
+- **WHEN** no grant is recorded for the recipient
+- **THEN** every field marked as personal data is omitted
+- **AND** the omission is a deliberate refusal rather than a default
 
 #### Scenario: New personal field added
 
 - **WHEN** a field marked as personal data is added to the mapping matrix
-- **THEN** the redaction test fails until it is omitted
+- **THEN** the coverage test fails until that field carries an explicit grant decision
 
 ### Requirement: The endpoints are reversible without a deploy
 
