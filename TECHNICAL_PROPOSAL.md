@@ -92,7 +92,7 @@ exist because of them.
 - Real-time (sub-second) propagation guarantees.
 - Replacing existing synchronous read APIs.
 
-### 2.3 Open questions — **blocking, need answers before/during week 1**
+### 2.3 Open questions — **blocking, resolved in stage 0**
 
 | # | Question | Blocks | Default if unanswered |
 |---|---|---|---|
