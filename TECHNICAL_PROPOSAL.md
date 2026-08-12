@@ -110,6 +110,9 @@ exist because of them.
 | Q16 | Who owns `CONSUMER_CONTRACT.md` and signs it off? (defect D13) | Stage 2 onward | **Blocks stage 2** — a pull consumer cannot be correct without it |
 | Q18 | What merge metadata can the aggregator send and echo — per-field `updatedAt`, `changedFields[]`, `basedOnVersion`, stable ids on collection items? (ADR-0008) | Stage 5 merge precision | **Assume none.** The shadow baseline derives the diff; each capability removes one approximation |
 | Q19 | The aggregator's reference-data API: how are picklists exposed, versioned and scoped by region? (ADR-0009) | Stage 5 — entity processing cannot start on a stale vocabulary | **Pull per set with an ETag**, applied atomically |
+| **Q20** | **Does the aggregator deduplicate creation by our `sourceRef` / `Idempotency-Key`?** (ADR-0010 §3) | **Everything that creates an entity.** Without it a lost response produces a duplicate entity in the global aggregator, invisible from our side | **Assume no** — which forces the pre-issued reserve of ADR-0010 §8 |
+| Q21 | Can the aggregator merge or retire a global identifier when it deduplicates? (ADR-0010 §7) | Whether `status` / `superseded_by` are load-bearing | **Assume yes** — the columns cost nothing now and are expensive to retrofit |
+| Q22 | Must the global identifier be visible immediately after creation (UI, printed, quoted)? (ADR-0010 §8) | Ride-along issuance versus a pre-issued reserve | **Assume no** — ride-along; the reserve is the fallback |
 
 #### Answered
 
@@ -451,12 +454,19 @@ CREATE TABLE integration.consumer_cursor (
     updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
--- id correlation: ours <-> theirs, so we never overwrite our own key
+-- id correlation and the global-identifier ledger (ADR-0010).
+-- Ours <-> theirs, so a foreign key never overwrites our own.
 CREATE TABLE integration.external_reference (
-    aggregate_type text NOT NULL,
-    aggregate_id   uuid NOT NULL,
-    system         text NOT NULL,
-    external_id    text NOT NULL,
+    aggregate_type text        NOT NULL,
+    aggregate_id   uuid        NOT NULL,
+    system         text        NOT NULL,
+    external_id    text        NOT NULL,
+    region_code    text        NOT NULL,
+    status         text        NOT NULL DEFAULT 'Active'
+                   CHECK (status IN ('Active','Superseded')),
+    superseded_by  text,                       -- set when the aggregator merges identities (Q21)
+    issued_at      timestamptz,
+    issued_by      text,                       -- delivery-response | inbound | pool
     created_at     timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (aggregate_type, aggregate_id, system)
 );
@@ -635,7 +645,17 @@ Ship with (3), design the envelope so switching to (2) is a materializer change 
    `Idempotency-Key: {messageId}`, `traceparent`, `Content-Type: application/vnd.acme.foo.v1+json`,
    plus auth per ADR-0005.
 4. Classify the response (ADR-0003 §6 table) → `Delivered`, backoff, or dead letter.
-5. `AllowAutoRedirect = false`; per-request timeout 10 s; per-attempt Polly retry for blips.
+5. **On the first successful delivery of an entity, record the global identifier the aggregator
+   returns** into `integration.external_reference`, in the *same transaction* that marks the
+   delivery `Delivered` (ADR-0010 §2, §4). The ordering is not symmetric: acknowledge first and
+   crash, and the identifier is lost permanently because we never ask again; record first and
+   crash, and the retry returns the same identifier and rewrites the same row.
+6. `AllowAutoRedirect = false`; per-request timeout 10 s; per-attempt Polly retry for blips.
+
+Step 5 widens the dispatcher's contract: it no longer only classifies a status code, it parses a
+response body and writes durable state from it. That step is also where **Q20** binds — if the
+aggregator does not deduplicate creation by our `sourceRef`, a lost response makes the retry create
+a *second* entity with a *second* identifier.
 
 Batching: if the peer exposes a bulk endpoint, send up to N envelopes per request and process
 a per-item result array — otherwise one request per message with pipelined concurrency
@@ -944,6 +964,9 @@ during a joint go-live call.
 | R10 | Outbox table growth | Disk/performance | Low | Retention + partitioning; monitored |
 | R11 | Domain refactor breaks mapping silently | Wrong data at peer | Medium | Coverage test names the field; round-trip tests |
 | R12 | Kafka becomes available mid-project | Rework fear | Low | Only the dispatcher transport changes — argued in ADR-0001 |
+| **R13** | **Creation is not idempotent at the aggregator (Q20)** | **A lost response makes a retry create a duplicate entity with a second global identifier. No local symptom; expensive to unwind on their side** | Medium | Confirm Q20 before stage 4 ships. If negative, switch to the pre-issued reserve (ADR-0010 §8), where a lost response is harmless |
+| R14 | Concurrent edits silently discard one value | Business data lost with no trace | Medium | Per-field merge limits it to genuine conflicts; `conflict_log` makes it explainable; flap detector catches oscillation (ADR-0008) |
+| R15 | Reference replica stale, entities blocked | Inbound stalls, cause looked for in the wrong layer | Medium | Refresh-on-miss with cooldown, startup gate, `reference_set_age_seconds` alert (ADR-0009) |
 
 ---
 

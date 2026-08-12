@@ -174,6 +174,11 @@ flowchart LR
 
 **Goal.** Absorb peer data without giving external input a privileged write path.
 
+**Related — [ADR-0010](adr/ADR-0010-global-identifier-issuance-and-custody.md).** An entity created
+here acquires its aggregator-issued identifier from the response to its first successful delivery in
+stage 4. That identifier is custody of the integration layer, not a domain field, and it never
+participates in the merge below.
+
 **Prerequisite added by [ADR-0009](adr/ADR-0009-reference-data-replication-and-region-scoping.md).**
 Picklists are owned by the aggregator and replicated one-way per region. An entity referencing a
 code the replica does not yet hold cannot be applied, so the vocabulary must be current before

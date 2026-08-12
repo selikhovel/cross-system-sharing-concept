@@ -237,6 +237,25 @@ poller can be served.
 **Gated on:** D3, D4, D7, D12, S5.
 
 - [ ] `integration.subscriber` (proposal §4.4) and `integration.outbox_delivery` (§4.3).
+
+**Global identifiers** (ADR-0010 — the first delivery is where an entity acquires one):
+
+- [ ] ⭐ **Confirm Q20 before this stage ships.** If the aggregator does not deduplicate creation
+      by our `sourceRef`, a lost response makes the retry create a duplicate entity with a second
+      identifier — no local symptom, expensive to unwind on their side (risk R13). A negative
+      answer switches the mechanism to the pre-issued reserve of ADR-0010 §8.
+- [ ] Creation messages carry `sourceRef` and no global identifier; later messages carry both.
+- [ ] Record the returned identifier into `external_reference` **in the same transaction** that
+      acknowledges the delivery. Acknowledging first loses the identifier permanently.
+- [ ] Registration state `Unregistered → Registered → Superseded`; publication policy gains
+      **`Defer`** — `Skip` would silently drop an entity that is merely waiting.
+- [ ] Publish references in dependency order, or accept `sourceRef` in reference positions until
+      the referenced entity registers.
+- [ ] Created and deleted before the first sync ⇒ publish nothing. The absence of an
+      `external_reference` row is the test.
+- [ ] Identifier is immutable, never reused, and **excluded from the merge** (ADR-0008): it is
+      identity, not a value.
+- [ ] Expose it through a read-side view, never by adding a field to the aggregate.
 - [ ] Durable per-`(subscriber, aggregate)` projection state — last emitted version, last payload
       hash, emitted variant, in-scope flag — which scope-exit tombstones and hash suppression both
       need (**D12**).

@@ -51,6 +51,7 @@ leaving without a legal basis.
 | [ADR-0007](adr/ADR-0007-staged-delivery-and-the-first-increment.md) | Seven delivery stages, why stage 1 is a read-only API, and what that ordering costs |
 | [ADR-0008](adr/ADR-0008-bidirectional-synchronisation-and-conflict-resolution.md) | Both systems edit every field: three-way merge over a shadow baseline, per-field last-writer-wins, and why a snapshot alone silently reverts edits |
 | [ADR-0009](adr/ADR-0009-reference-data-replication-and-region-scoping.md) | Picklists and vocabularies are owned by the aggregator and replicated one-way per region; why an unknown code is a stale replica rather than bad data; region as a data dimension |
+| [ADR-0010](adr/ADR-0010-global-identifier-issuance-and-custody.md) | **Highest-priority open topic.** Where the aggregator-issued global identifier lives, how an entity created here acquires one without a synchronous call, and the one peer capability the whole mechanism rests on |
 
 ## Where to start
 
