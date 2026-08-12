@@ -67,7 +67,7 @@ foreign schema, so it does not belong in the layer that owns our use cases.
 ## 1. Discovery — what must be true in your system
 
 Do this **before** writing code. Every row is a real fork in the implementation, and finding the
-answer on day 4 costs a rewrite. Fill the "Answer" column in a scratch copy.
+answer at step 4 costs a rewrite. Fill the "Answer" column in a scratch copy.
 
 ### 1.1 Solution shape
 
@@ -1264,7 +1264,7 @@ public void External_contract_types_never_escape_the_integration_assembly()
 }
 ```
 
-Write §6.5 on day 1, while it is trivially green. It is the only test whose cost rises the longer
+Write §6.5 in step 1, while it is trivially green. It is the only test whose cost rises the longer
 you wait.
 
 ---
@@ -1302,7 +1302,7 @@ C16 rather than the mapping being built before there is anything to serve.
 `[svc]` = the service's repository. `[doc]` = this repository. Two repositories, so keep the commit
 trails separate.
 
-### Group A — Skeleton and boundaries (day 1)
+### Group A — Skeleton and boundaries (step 1)
 
 | # | What | Files | Verify | Commit |
 |---|---|---|---|---|
@@ -1313,7 +1313,7 @@ trails separate.
 
 > C1–C3 depend on nothing external. If Q2 and Q3 are still unanswered, this group still ships today.
 
-### Group B — Reading (day 1–2)
+### Group B — Reading (steps 1–2)
 
 | # | What | Files | Verify | Commit |
 |---|---|---|---|---|
@@ -1324,7 +1324,7 @@ trails separate.
 > If C5's SQL shows client-side evaluation, stop and switch to §4.3.1 *here*, not later — everything
 > downstream depends on the store's shape.
 
-### Group C — Surface (day 2–3)
+### Group C — Surface (steps 2–3)
 
 | # | What | Files | Verify | Commit |
 |---|---|---|---|---|
@@ -1337,7 +1337,7 @@ trails separate.
 > it correct rather than making it work — and that ordering is deliberate, because a visible endpoint
 > is what gets the peer to look at a payload and tell you the field names are wrong.
 
-### Group D — The anti-corruption layer (day 3–4, and this is the real work)
+### Group D — The anti-corruption layer (steps 3–4, and this is the real work)
 
 | # | What | Files | Verify | Commit |
 |---|---|---|---|---|
@@ -1353,7 +1353,7 @@ trails separate.
 > list is the last input to `MAPPING_MATRIX.md`, and finding it here costs an hour, whereas finding it
 > in stage 3 costs a peer conversation.
 
-### Group E — Handover (day 5)
+### Group E — Handover (step 5)
 
 | # | What | Files | Verify | Commit |
 |---|---|---|---|---|
@@ -1379,7 +1379,7 @@ C0 ──┬─► C1 ─► C2
 - **C9 needs Q2** (which auth mechanism). Until it is answered, build the seam and one implementation
   against whatever your service already uses, and keep the endpoints flagged off.
 - **C16 and C19 need Q3** (the peer's schema) and a counterpart on the other team. These are the only
-  externally blocked steps, and they are the exit criteria — which is why Q3 is requested on day 0 and
+  externally blocked steps, and they are the exit criteria — which is why Q3 is requested in stage 0 and
   chased daily.
 
 ### Effort versus calendar

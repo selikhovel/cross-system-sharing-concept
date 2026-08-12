@@ -119,7 +119,7 @@ bandwidth, which for a property record (~2–8 KB) at this volume is irrelevant.
   `previousAggregateVersion` ≠ their stored version, then re-bootstrap.
 - Add ~1 sprint for the ordering and gap-detection machinery.
 
-> **Action required:** confirm the shape with the peer team before implementation day 3.
+> **Action required:** confirm the shape with the peer team before stage 3.
 > Until confirmed, build for snapshots — it is the strictly simpler path and the delta variant
 > can reuse the same envelope, mapper, and outbox.
 

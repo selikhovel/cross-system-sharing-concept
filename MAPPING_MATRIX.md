@@ -96,7 +96,7 @@ Same structure. Key decisions to record when filling in:
   or only references? Embedding means a `Bar` change must re-emit every `Foo` in it —
   a fan-out that has to be handled in the materializer (`Bar` changed → enqueue change-log
   rows for every `Foo` that references it). Cheap to implement, expensive to discover later.
-  **Confirm with the peer before implementation day 2.**
+  **Confirm with the peer before stage 1, step 2.**
 - **Baz hierarchy.** If `Baz` is a tree (country → region → city → district) and the
   peer expects a flat set of names, record the flattening rule here, including behaviour when a
   level is missing.

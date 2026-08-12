@@ -478,7 +478,7 @@ guarantees and non-guarantees are written down for the consumer".
 
 | Task | Title | Guide | Pts |
 |---|---|---|---|
-| **T1.5.1-a** | Architecture tests, written on day 1 while trivially green | §6.5, C2 | 2 |
+| **T1.5.1-a** | Architecture tests, written in step 1 while trivially green | §6.5, C2 | 2 |
 
 #### US1.5.2 — Know what stage 1 does and does not guarantee
 

@@ -36,7 +36,7 @@ leaving without a legal basis.
 |---|---|
 | [TECHNICAL_PROPOSAL.md](TECHNICAL_PROPOSAL.md) | The full design: architecture, DDL, pipelines, security, operations, testing, capacity, rollout, risks |
 | [MAPPING_MATRIX.md](MAPPING_MATRIX.md) | Field-by-field mapping specification and the losslessness checklist. **Fill in from the peer's schema before writing mappers** |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Task detail per stage, with stage 1 broken down by day |
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Task detail per stage, with stage 1 broken into ordered steps |
 | [STAGE_1_READ_API.md](STAGE_1_READ_API.md) | **Start here to write code.** Stage 1 in full: what to check in an existing Clean Architecture / CQRS / EF Core service, where each file goes, the code, the tests, and the EF-specific traps |
 | [BACKLOG.md](BACKLOG.md) | **Start here to plan.** The whole integration as epics → features → stories → tasks, with sizing, traceability to requirements, and which open questions block which item |
 | [STAGES_DECK.md](STAGES_DECK.md) | **Start here to brief someone.** All seven stages with Mermaid architecture diagrams: goal, what a consumer can newly do, what the ordering costs, and when each guarantee arrives. Derived from ADR-0007, which stays authoritative |

@@ -43,7 +43,7 @@ Four properties this buys, in priority order:
 Estimated effort: **~4 weeks of engineering for one engineer to production-ready** — calendar time
 is longer, because `MAPPING_MATRIX.md` §7 carries eight gaps that each need a round trip with
 another team. Delivery is staged (ADR-0007): a peer can `GET` our catalogue in their contract shape
-at the **end of stage 1, day 2**, with no new tables and no change to the write path.
+at the **end of stage 1, step 2**, with no new tables and no change to the write path.
 
 ---
 
@@ -815,7 +815,7 @@ detail per stage is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Not res
 copies of a rollout order drift within a sprint.
 
 In summary: stage 1 is an on-demand, contract-shaped **read API** over the domain with no new
-tables, so contact with the peer's contract happens first rather than behind five days of
+tables, so contact with the peer's contract happens first rather than behind a stack of
 infrastructure. Change capture is stage 2, the incremental feed stage 3, push delivery stage 4,
 inbound stage 5, backfill runs and reconciliation stage 6, hardening stage 7.
 

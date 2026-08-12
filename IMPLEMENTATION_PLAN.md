@@ -4,11 +4,14 @@ Companion to [TECHNICAL_PROPOSAL.md](TECHNICAL_PROPOSAL.md). The staging and its
 [ADR-0007](adr/ADR-0007-staged-delivery-and-the-first-increment.md) — this document is the task
 detail inside each stage, not the decision about their order.
 
-Stage 1 is broken down by day because it is what starts today. Later stages are listed as task
-sets, because their day-level order depends on what stage 1 learns about the peer's contract.
+Stage 1 is broken into ordered steps because it is what starts first. Later stages are listed as
+task sets, because their internal order depends on what stage 1 learns about the peer's contract.
+
+**Steps are ordered by dependency, not by calendar.** Each one ends in something demonstrable, so
+progress is measured by which step closed rather than by how long it took.
 
 **Critical-path note:** the peer's OpenAPI schema (Q3) is the only true external blocker, and
-stage 1 is arranged to hit it in the first two days rather than in week 2. Stage 1 can begin
+stage 1 is arranged to hit it in its first two steps rather than at the end. Stage 1 can begin
 against a stub contract, but it cannot *exit* without the real one.
 
 ---
@@ -43,11 +46,11 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
 
 > **[STAGE_1_READ_API.md](STAGE_1_READ_API.md) is the implementation guide for this stage** — the
 > discovery checklist for an existing Clean Architecture / CQRS / EF Core service, where each file
-> goes and why, the code, the tests, and the twelve EF-specific traps. The days below are the
+> goes and why, the code, the tests, and the twelve EF-specific traps. The steps below are the
 > checklist; that document is the detail behind every line of it. Start with its §1: several answers
 > there change the code you write.
 
-### Day 1 — projects, projection, and a payload on screen
+### Step 1 — projects, projection, and a payload on screen
 
 1. **Projects**
    - [ ] `Acme.Integration` (classlib), `Acme.Integration.Contracts` (stub until
@@ -71,9 +74,9 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
    - [ ] Stub contract type until the peer's schema arrives; every ignore carries a written reason
          pointing at `MAPPING_MATRIX.md`.
 
-**End of day:** a unit test maps a `FooSnapshot` to a contract object and prints the JSON.
+**Step closes when:** a unit test maps a `FooSnapshot` to a contract object and prints the JSON.
 
-### Day 2 — the endpoints
+### Step 2 — the endpoints
 
 - [ ] `GET /integration/v1/foos/{id}` → the envelope of ADR-0006 §2 with one item, or `404`.
 - [ ] `GET /integration/v1/foos?cursor=&limit=` → `{ items, nextCursor, hasMore }`.
@@ -86,7 +89,7 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
       Do not improvise one from a timestamp.
 - [ ] Feature flag `Integration:ReadApiEnabled`, default `false` in production.
 
-### Day 3 — security floor
+### Step 3 — security floor
 
 - [ ] `IIntegrationAuthenticator` seam so the mechanism is swappable (ADR-0005 §2 ladder).
 - [ ] Authentication + one scope (`acme.feed.read`) on both routes.
@@ -97,7 +100,7 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
       `*secret*` — with a test asserting a token never reaches the output.
 - [ ] **Personal data under a recorded grant** (Q6): the peer is entitled and marks some personal fields `required`, so blanket redaction would produce payloads failing its validation. Emit them, and record the legal basis and retention before shipping.
 
-### Day 4 — the tests that make it a contract, not an endpoint
+### Step 4 — the tests that make it a contract, not an endpoint
 
 - [ ] ⭐ **Field-coverage test** (ADR-0004 §5b): reflection walk over `Foo`; every public
       property is mapped or listed in `IntegrationFieldExclusions` with a reason. This is the
@@ -116,7 +119,7 @@ on demand from the domain. No new tables, no migration, no workers, no write-pat
       duplicate and no gap, including while rows are inserted mid-walk.
 - [ ] Architecture tests green.
 
-### Day 5 — contract and handover
+### Step 5 — contract and handover
 
 - [ ] Vendor `contracts/external/{system}/openapi.v1.yaml`; generate DTOs (Kiota or NSwag);
       **delete the stub**.
@@ -322,13 +325,13 @@ green.
 
 ---
 
-## If you only have today
+## Where to start
 
 1. **Stage 0** — especially requesting the peer's schema and naming a pilot consumer. Both are
    other people's latency; start them before anything you control.
-2. **Stage 1, day 1** — projects, the projection, the mapper, the architecture test. Four hours,
+2. **Stage 1, step 1** — projects, the projection, the mapper, the architecture test. It is short,
    and it ends with a real payload on screen.
-3. **Stage 1, day 4's coverage test** — bring it forward if there is time left. It is the test that
+3. **Stage 1, step 4's coverage test** — bring it forward if there is capacity. It is the test that
    makes "nothing is silently lost" true rather than intended.
 
 Do **not** start with the interceptor or the outbox. They are unblocked work that can be done at
