@@ -203,6 +203,19 @@ partition. Two exceptions are structural rather than negotiated:
   is drawn from is owned by the aggregator. Record the field's class here — mistaking an owned enum
   for a picklist loses exhaustiveness, and the reverse blocks entities on our release cadence.
 
+## 6b. Extension keys (ADR-0009 §8)
+
+Regional particulars may need fields the base contract does not carry, so `additionalAttributes`
+exists as an escape hatch. It has a known failure mode: within a year it becomes where anything
+nobody wanted to negotiate is dumped, and nobody can say what is in it.
+
+**Every extension key is registered here before use**, and an unregistered key arriving inbound is
+dead-lettered. The hatch stays; the dumping ground does not appear.
+
+| Key | Region | Type | Owner | Meaning | Status |
+|---|---|---|---|---|---|
+| *(none yet)* | | | | | |
+
 ---
 
 ## 7. Open gaps (blockers — must be resolved before implementation)
@@ -219,6 +232,8 @@ partition. Two exceptions are structural rather than negotiated:
 | 7.8 | Media | Attachment URLs | Are our URLs reachable from the peer, or must we push binaries? | | ⬜ open |
 | 7.9 | Merge | collection items | Do `FooAttachment` / `FooTag` / `BarUnit` carry stable ids on both sides? Without them collections cannot merge per item (ADR-0008 §3) | | ⬜ open |
 | 7.10 | Merge | peer metadata | Per-field `updatedAt`, `changedFields[]`, `basedOnVersion`? Q18 — the design works without them, less precisely | | ⬜ open |
+| 7.11 | Vocabulary | every picklist-backed field | Map our existing codes to the aggregator's, by hand. Manual, unautomatable, routinely larger than the pipeline, and it gates go-live (ADR-0009 §9) | | ⬜ open |
+| 7.12 | Reference data | picklist API | Q19 — how sets are exposed, versioned and scoped by region | | ⬜ open |
 
 ---
 

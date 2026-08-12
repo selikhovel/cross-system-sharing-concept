@@ -3,6 +3,13 @@
 - **Status:** Proposed
 - **Date:** 2026-07-25
 - **Related:** ADR-0001, ADR-0003, ADR-0004
+- **Amended by:** [ADR-0009](ADR-0009-reference-data-replication-and-region-scoping.md) §5, §7 —
+  bootstrap order becomes *regions → reference sets → entities*; reconciliation checksums are
+  scoped to our region because we hold a partial replica of a global catalogue; and a record
+  leaving our region emits `OutOfScope`, never `Deleted`
+- **Amended by:** [ADR-0008](ADR-0008-bidirectional-synchronisation-and-conflict-resolution.md) —
+  a backfill run also initialises `integration.peer_shadow`, which makes it a prerequisite for
+  inbound rather than a follow-up
 
 ## Context
 

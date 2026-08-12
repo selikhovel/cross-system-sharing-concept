@@ -9,6 +9,10 @@
   the envelope (§3 below) gains `changedFields[]`. The snapshot decision stands; the snapshot is
   no longer the message's only content, because applying one wholesale reverts fields the sender
   never touched
+- **Amended by:** [ADR-0009](ADR-0009-reference-data-replication-and-region-scoping.md) §4 — the
+  fail-closed enum rule (§6 below) applies only to enums this service owns. Values drawn from an
+  aggregator-owned picklist are resolved at runtime against a replica, and an unknown code means a
+  stale replica rather than bad data: refresh and retry once, then permanent
 
 ## Context
 

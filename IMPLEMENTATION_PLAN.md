@@ -33,9 +33,18 @@ against a stub contract, but it cannot *exit* without the real one.
       risk R4 is closed.
 - [ ] Confirm whether aggregates already raise domain events (if yes, ADR-0002's opt-in event path
       in stage 3 gets simpler).
-- [ ] Open tickets with owners for the twelve questions still open in proposal §2.3, and **assign an
-      owner to each of the eight gaps in `MAPPING_MATRIX.md` §7** — all eight are currently ownerless,
-      and a gap without a name against it does not move.
+- [ ] Open tickets with owners for every question still open in proposal §2.3, and **assign an
+      owner to each gap in `MAPPING_MATRIX.md` §7** — they are currently ownerless, and a gap with
+      no name against it does not move.
+- [ ] Ask the aggregator how reference data is exposed, versioned and scoped by region (Q19) —
+      stage 5 cannot process entities against a stale vocabulary.
+- [ ] Start the **vocabulary reconciliation** sheet: our existing codes against the aggregator's,
+      by hand. It is manual, does not automate, is routinely larger than the pipeline it enables,
+      and it gates go-live — so it starts now rather than when the pipeline is ready
+      (ADR-0009 §9, gap 7.11).
+- [ ] Confirm the region model: one region per instance today, several later. `region_code` goes
+      into the integration tables and `{region}` into the API paths from the first endpoint —
+      both are free now and breaking changes later (ADR-0009 §6).
 
 ---
 
@@ -271,6 +280,23 @@ green.
 > the shadow-initialisation subset of stage 6 forward, or accept that the first inbound message per
 > aggregate has no baseline and takes the peer's state whole, which is the behaviour ADR-0008
 > exists to prevent. **This needs a decision before stage 5 starts; it is not a detail.**
+
+**Reference data** (ADR-0009 — a separate one-way pipeline, and a hard prerequisite):
+
+- [ ] `integration.reference_set` / `reference_value`; pull worker with ETag per set; **atomic
+      apply per set** in one transaction.
+- [ ] Project into the domain's own reference table (`source` column separating aggregator rows
+      from historical local ones), so the domain's FK never points into `integration`.
+- [ ] Withdrawn values become `is_active = false`. **Never delete** — hard-deleting invalidates
+      historical records retroactively.
+- [ ] **Refresh-on-miss with a cooldown.** An unknown code means a stale replica, not bad data:
+      refresh the set and retry once, then permanent. The cooldown stops a batch carrying a
+      genuinely unknown code from becoming a request storm.
+- [ ] Startup gate: entity processing does not begin until every set has synced once.
+- [ ] `reference_set_age_seconds` SLI and staleness alert — a stale replica presents as entity
+      errors, and without this metric the cause is looked for in the wrong layer.
+- [ ] Extension-key registry enforced: an unregistered key inbound is dead-lettered.
+- [ ] Bootstrap order **regions → reference sets → entities**, in backfill and at runtime.
 
 **Merge machinery** (ADR-0008 — build before the first message is applied):
 

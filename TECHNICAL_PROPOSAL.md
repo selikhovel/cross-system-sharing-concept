@@ -109,6 +109,7 @@ exist because of them.
 | Q14 | Does the consumer need `changeKind = Event` transition messages? | Stage 4 stream locking (finding S2) | **No** — defer stream locking entirely |
 | Q16 | Who owns `CONSUMER_CONTRACT.md` and signs it off? (defect D13) | Stage 2 onward | **Blocks stage 2** — a pull consumer cannot be correct without it |
 | Q18 | What merge metadata can the aggregator send and echo — per-field `updatedAt`, `changedFields[]`, `basedOnVersion`, stable ids on collection items? (ADR-0008) | Stage 5 merge precision | **Assume none.** The shadow baseline derives the diff; each capability removes one approximation |
+| Q19 | The aggregator's reference-data API: how are picklists exposed, versioned and scoped by region? (ADR-0009) | Stage 5 — entity processing cannot start on a stale vocabulary | **Pull per set with an ETag**, applied atomically |
 
 #### Answered
 
@@ -531,6 +532,42 @@ losing value is stored nowhere else, so without it "who reverted this field" has
 `peer_shadow` must be initialised by backfill (§5.6). Until it is, the first inbound merge for an
 aggregate has no baseline and degrades to taking the peer's state whole — the behaviour ADR-0008
 exists to prevent. This makes backfill a prerequisite for inbound rather than a follow-up.
+
+### 4.8 Reference data replica (ADR-0009)
+
+The aggregator owns the picklists and vocabularies, and they are regional. This is a **one-way**
+pipeline sharing nothing with the outbox: we never publish reference data, there is nothing to
+merge, and the unit of versioning is the whole set rather than the field.
+
+```sql
+CREATE TABLE integration.reference_set (
+    region_code text        NOT NULL,
+    set_name    text        NOT NULL,      -- 'FooKind'
+    version     text        NOT NULL,      -- ETag / version token from the aggregator
+    synced_at   timestamptz NOT NULL,
+    PRIMARY KEY (region_code, set_name)
+);
+
+CREATE TABLE integration.reference_value (
+    region_code text    NOT NULL,
+    set_name    text    NOT NULL,
+    code        text    NOT NULL,
+    label       jsonb,
+    sort_order  int,
+    is_active   boolean NOT NULL DEFAULT true,   -- withdrawn values are deactivated, never deleted
+    attributes  jsonb,
+    PRIMARY KEY (region_code, set_name, code)
+);
+```
+
+A set is applied **atomically in one transaction**, then projected into the domain's own reference
+table so the domain's foreign keys never point into the `integration` schema. A `source` column on
+that domain table separates aggregator-sourced rows from historical local ones — without it the
+cutover cannot be reversed.
+
+`region_code` is added to **every** integration table listed in this section, populated from
+instance configuration. One region exists today; the column and the `{region}` path segment are
+present from the start because both are free now and expensive to retrofit.
 
 ---
 

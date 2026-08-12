@@ -174,6 +174,12 @@ flowchart LR
 
 **Goal.** Absorb peer data without giving external input a privileged write path.
 
+**Prerequisite added by [ADR-0009](adr/ADR-0009-reference-data-replication-and-region-scoping.md).**
+Picklists are owned by the aggregator and replicated one-way per region. An entity referencing a
+code the replica does not yet hold cannot be applied, so the vocabulary must be current before
+entity processing starts — and an unknown code means a stale replica, not bad data: refresh and
+retry, rather than dead-letter.
+
 **Mechanism changed by [ADR-0008](adr/ADR-0008-bidirectional-synchronisation-and-conflict-resolution.md).**
 Every field is editable on both sides, so the translator produces a *partial* update from a
 three-way merge against a shadow baseline — never a whole-entity replace, which would revert
