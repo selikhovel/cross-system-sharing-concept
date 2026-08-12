@@ -263,7 +263,32 @@ green.
 
 ## Stage 5 — Inbound
 
-**Gated on:** D6 in full, S1.
+**Gated on:** D6 in full, S1, and **an initialised `peer_shadow`** — see the ordering note below.
+
+> **Ordering tension with ADR-0007.** Both systems edit every field, so an inbound snapshot cannot
+> be applied wholesale (ADR-0008). The three-way merge needs a baseline, and the baseline is
+> populated by a backfill run — which ADR-0007 places in stage 6, *after* this stage. Either pull
+> the shadow-initialisation subset of stage 6 forward, or accept that the first inbound message per
+> aggregate has no baseline and takes the peer's state whole, which is the behaviour ADR-0008
+> exists to prevent. **This needs a decision before stage 5 starts; it is not a detail.**
+
+**Merge machinery** (ADR-0008 — build before the first message is applied):
+
+- [ ] `integration.peer_shadow`, `integration.field_state`, `integration.conflict_log`.
+- [ ] Hybrid logical clock `(wallMs, counter, nodeId)`. **Not wall clock** — skew between services
+      picks the wrong winner deterministically and silently.
+- [ ] The five-row merge decision table (ADR-0008 §1). Last-writer-wins fires only on the last row;
+      the other four are deterministic and lossless.
+- [ ] Derive `changedFields` by diffing against the shadow when the peer sends none.
+- [ ] **Applying a remote change preserves the remote timestamp.** Writing `now()` makes our echo
+      always look newer and the field oscillates forever. This is the single most common way a
+      last-writer-wins integration fails.
+- [ ] Deterministic tie-break by system id, identical on both sides.
+- [ ] Flap detector: a field changing more than N times in a window suspends sync for that field
+      and alerts.
+- [ ] Per-item merge for collections, keyed by stable item ids (gap 7.9).
+- [ ] Tests: every row of the decision table; a simulated concurrent edit storm converges; the flap
+      detector trips.
 
 - [ ] `POST /integration/v1/inbound/{messageType}` — authenticate, validate structurally, insert,
       `202`. Reject a missing `Idempotency-Key` with `400`.
@@ -271,10 +296,13 @@ green.
       OAuth-specific `client_id` claim (**S1**).
 - [ ] `integration.inbox_message` with the unique dedup index and `ON CONFLICT DO NOTHING`.
 - [ ] `InboxWorker`: claim → translate → **existing application command handler** → processed.
-- [ ] Inbound ACL translators (peer contract → command).
+- [ ] Inbound ACL translators producing **partial update commands** — only the fields the merge
+      resolved, never a whole-entity replace.
 - [ ] Failure taxonomy: translation permanent, concurrency transient, domain rejection terminal.
 - [ ] Echo suppression: propagation path in the envelope and the change log, on top of stage 3's
       hash suppression. Verify across a **three-system** loop, not just a direct echo (**D6**).
+- [ ] Echo suppression at **field level**: fields applied from the peer are not reported back as
+      changed by us, or `changedFields` lies and the loop returns.
 - [ ] `integration.external_reference`, with a conflicting binding dead-lettered rather than
       rebound.
 - [ ] Per-endpoint client allowlist; JWT validation with JWKS caching; scope policies.

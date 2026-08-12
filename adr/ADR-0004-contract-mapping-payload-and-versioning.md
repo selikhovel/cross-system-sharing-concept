@@ -5,6 +5,10 @@
 - **Open question:** payload shape (snapshot vs delta) is **not yet confirmed by the peer
   team** — this ADR specifies both and states the default plus the switch criteria.
 - **Related:** ADR-0002 (materialisation), ADR-0003 (delivery), MAPPING_MATRIX.md
+- **Amended by:** [ADR-0008](ADR-0008-bidirectional-synchronisation-and-conflict-resolution.md) §2 —
+  the envelope (§3 below) gains `changedFields[]`. The snapshot decision stands; the snapshot is
+  no longer the message's only content, because applying one wholesale reverts fields the sender
+  never touched
 
 ## Context
 

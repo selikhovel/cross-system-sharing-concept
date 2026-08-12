@@ -108,6 +108,7 @@ exist because of them.
 | Q11 | Does the envelope need a propagation path, or is direct-source suppression enough now that only two systems are in scope? (defect D6) | Stage 5 | **Direct-source plus content-hash suppression** — no contract change needed |
 | Q14 | Does the consumer need `changeKind = Event` transition messages? | Stage 4 stream locking (finding S2) | **No** — defer stream locking entirely |
 | Q16 | Who owns `CONSUMER_CONTRACT.md` and signs it off? (defect D13) | Stage 2 onward | **Blocks stage 2** — a pull consumer cannot be correct without it |
+| Q18 | What merge metadata can the aggregator send and echo — per-field `updatedAt`, `changedFields[]`, `basedOnVersion`, stable ids on collection items? (ADR-0008) | Stage 5 merge precision | **Assume none.** The shadow baseline derives the diff; each capability removes one approximation |
 
 #### Answered
 
@@ -480,6 +481,59 @@ CREATE TABLE integration.backfill_run (
 
 ---
 
+### 4.7 Bidirectional merge state (ADR-0008)
+
+Required from stage 5. Every field of `Foo`, `Bar` and `Baz` is editable in both systems, so an
+inbound snapshot cannot be applied wholesale — it would revert fields the sender never touched.
+These three tables carry the baseline, the per-field clock and the audit of automatic resolutions.
+
+```sql
+-- last known peer state: the baseline of the three-way merge
+CREATE TABLE integration.peer_shadow (
+    aggregate_type text        NOT NULL,
+    aggregate_id   uuid        NOT NULL,
+    peer_system    text        NOT NULL,
+    region_code    text        NOT NULL,
+    state          jsonb       NOT NULL,   -- canonical contract-shaped snapshot
+    state_hash     bytea       NOT NULL,
+    updated_at     timestamptz NOT NULL,
+    PRIMARY KEY (aggregate_type, aggregate_id, peer_system)
+);
+
+-- per-field hybrid logical clock and writer
+CREATE TABLE integration.field_state (
+    aggregate_type text NOT NULL,
+    aggregate_id   uuid NOT NULL,
+    field_path     text NOT NULL,          -- 'price.amount'
+    updated_at     text NOT NULL,          -- HLC (wallMs, counter, nodeId) — never wall clock
+    updated_by     text NOT NULL,          -- 'acme' | 'peer-a'
+    PRIMARY KEY (aggregate_type, aggregate_id, field_path)
+);
+
+-- every automatically resolved conflict, including the value that lost
+CREATE TABLE integration.conflict_log (
+    id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    aggregate_type text NOT NULL,
+    aggregate_id   uuid NOT NULL,
+    field_path     text NOT NULL,
+    our_value      jsonb,
+    their_value    jsonb,
+    winner         text NOT NULL,
+    our_ts         text,
+    their_ts       text,
+    resolved_at    timestamptz NOT NULL DEFAULT now()
+);
+```
+
+`conflict_log` blocks nothing — conflicts resolve automatically by policy. It exists because the
+losing value is stored nowhere else, so without it "who reverted this field" has no answer.
+
+`peer_shadow` must be initialised by backfill (§5.6). Until it is, the first inbound merge for an
+aggregate has no baseline and degrades to taking the peer's state whole — the behaviour ADR-0008
+exists to prevent. This makes backfill a prerequisite for inbound rather than a follow-up.
+
+---
+
 ## 5. Outbound pipeline
 
 ### 5.1 Stage 1 — change capture
@@ -624,9 +678,16 @@ identify its own message cannot be deduplicated, and silently accepting guarante
 
 ### 6.2 Inbox worker and translation
 
-Claim → translate (peer contract → our command, via the inbound ACL) → execute the existing
-application command handler → mark `Processed`. Same backoff and dead-letter machinery as
+Claim → translate (peer contract → our command, via the inbound ACL) → **merge** → execute the
+existing application command handler → mark `Processed`. Same backoff and dead-letter machinery as
 outbound.
+
+The merge step is not optional here. Because both systems edit every field, the translator must
+produce a **partial update command** carrying only the fields the three-way merge resolved
+(ADR-0008 §1, §4) — never a whole-entity replace. A replace reverts whatever the sender did not
+touch, silently and with no local symptom. The fields to apply come from the message's
+`changedFields[]`, or, when the peer sends none, from diffing its snapshot against
+`integration.peer_shadow` (§4.7).
 
 Rules:
 

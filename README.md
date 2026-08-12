@@ -49,6 +49,7 @@ leaving without a legal basis.
 | [ADR-0005](adr/ADR-0005-authentication-and-transport-security.md) | Service-to-service auth (recommendation + fallback ladder), PII, SSRF, replay |
 | [ADR-0006](adr/ADR-0006-initial-backfill-and-reconciliation.md) | Go-live backfill and ongoing divergence detection |
 | [ADR-0007](adr/ADR-0007-staged-delivery-and-the-first-increment.md) | Seven delivery stages, why stage 1 is a read-only API, and what that ordering costs |
+| [ADR-0008](adr/ADR-0008-bidirectional-synchronisation-and-conflict-resolution.md) | Both systems edit every field: three-way merge over a shadow baseline, per-field last-writer-wins, and why a snapshot alone silently reverts edits |
 
 ## Where to start
 

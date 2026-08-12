@@ -184,6 +184,27 @@ Restated from ADR-0004 §6 so implementers have one place to look:
 
 ---
 
+## 6a. Ownership and merge granularity (ADR-0008)
+
+Bidirectional synchronisation makes two more facts per field mandatory, so §2's table gains two
+columns as it is filled in:
+
+| Column | Values | Why it is needed |
+|---|---|---|
+| **Owner** | `shared` / `acme` / `peer-a` | `shared` fields go through the three-way merge. An owned field skips it entirely — the non-owner's value is discarded without a clock. Recording this is what allows the cheap path to be taken where it applies |
+| **Granularity** | `field` / `item` | A collection merged as one field reproduces the whole-document overwrite one level down. `item` requires a **stable id** on each element; where none exists today, that is a prerequisite, not a detail |
+
+Current position: every field of `Foo`, `Bar` and `Baz` is `shared` — there is no natural
+partition. Two exceptions are structural rather than negotiated:
+
+- The **global identifier** (ADR-0010) is `peer-a`, immutable, and **never merged**. It is
+  identity, not a value.
+- **Picklist-backed codes** (ADR-0009) carry a value that is `shared`, but the vocabulary the value
+  is drawn from is owned by the aggregator. Record the field's class here — mistaking an owned enum
+  for a picklist loses exhaustiveness, and the reverse blocks entities on our release cadence.
+
+---
+
 ## 7. Open gaps (blockers — must be resolved before implementation)
 
 | # | Type | Field | Question for the peer team | Owner | Status |
@@ -196,6 +217,8 @@ Restated from ADR-0004 §6 so implementers have one place to look:
 | 7.6 | Shape | Denormalisation depth | Embed `Bar`/`Baz`, or references only? Drives fan-out design | | ⬜ open |
 | 7.7 | PII | contact details | Is the peer authorised to receive them? Legal basis + retention? | | ⬜ open |
 | 7.8 | Media | Attachment URLs | Are our URLs reachable from the peer, or must we push binaries? | | ⬜ open |
+| 7.9 | Merge | collection items | Do `FooAttachment` / `FooTag` / `BarUnit` carry stable ids on both sides? Without them collections cannot merge per item (ADR-0008 §3) | | ⬜ open |
+| 7.10 | Merge | peer metadata | Per-field `updatedAt`, `changedFields[]`, `basedOnVersion`? Q18 — the design works without them, less precisely | | ⬜ open |
 
 ---
 

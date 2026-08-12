@@ -3,6 +3,9 @@
 - **Status:** Proposed
 - **Date:** 2026-07-25
 - **Related:** ADR-0001, ADR-0002, ADR-0004, ADR-0006
+- **Amended by:** [ADR-0008](ADR-0008-bidirectional-synchronisation-and-conflict-resolution.md) §7 —
+  compaction (§4 below) now takes the **union** of the `changedFields` of the messages it
+  supersedes, rather than only the newest message's list
 
 ## Context
 

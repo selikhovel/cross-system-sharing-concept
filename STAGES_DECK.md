@@ -174,6 +174,12 @@ flowchart LR
 
 **Goal.** Absorb peer data without giving external input a privileged write path.
 
+**Mechanism changed by [ADR-0008](adr/ADR-0008-bidirectional-synchronisation-and-conflict-resolution.md).**
+Every field is editable on both sides, so the translator produces a *partial* update from a
+three-way merge against a shadow baseline — never a whole-entity replace, which would revert
+whatever the sender did not touch. That baseline is populated by a backfill run, currently
+scheduled in stage 6; the ordering needs resolving before this stage starts.
+
 ```mermaid
 flowchart LR
     peer["peer-a"] -->|"POST /inbound<br/>202 for new AND duplicate"| ing["Ingress<br/>authn · schema · one insert"]

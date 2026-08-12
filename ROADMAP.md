@@ -63,7 +63,7 @@ flowchart LR
     S1["Stage 1<br/>read API"] --> S2["Stage 2<br/>capture"]
     S2 --> S3["Stage 3<br/>feed"]
     S3 --> S4["Stage 4<br/>push"]
-    S3 --> S5["Stage 5<br/>inbound"]
+    S3 --> S5["Stage 5<br/>inbound<br/>needs a shadow baseline"]
     S4 --> S6["Stage 6<br/>backfill"]
     S5 --> S6
     S6 --> S7["Stage 7<br/>hardening"]
@@ -110,6 +110,7 @@ flowchart LR
     end
     subgraph s5["Stage 5"]
         p6["The exchange is bidirectional"]
+        p6b["Concurrent edits converge<br/>per field, not per record"]
     end
     subgraph s6["Stage 6"]
         p7["Divergence found by a job"]
